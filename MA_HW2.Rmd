@@ -1,0 +1,1612 @@
+---
+title: 'Multivariate analysis_Homework 2'
+author: "YI-CHUN OU"
+date: "3/18/2021"
+output: 
+  html_document:
+    code_folding: show
+    df_print: paged
+    toc: true
+    theme: united
+    toc_depth: 4
+    number_sections: true
+    toc_float: true
+---
+
+<style>
+  .answer {color: blue}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+library(rstan)
+library(arulesViz)
+library(gridExtra)
+library(coefplot)
+```
+
+## Question 1
+Invent your own example of a spurious correlation. An outcome variable should be correlated with both predictor variables. But when both predictors are entered in the same model, the correlation between the outcome and one of the predictors should mostly vanish (or at least be greatly reduced).
+
+<div class="answer">
+__Ans__<br>
+From the result, we can see y is positively correlated with x1 and y is also positively correlated with x2 in the individual model. When both predictors are entered in the same model, there is a spurious association between x2 and y. We can see x1 dominates x2 in their effect in the multivariate regression. Besides zero is located in the 89% confidence interval of x2.
+</div>
+
+```{r}
+# generate
+n <- 100
+d <- tibble(
+    x = runif(n, min=-5, max=5)
+  ) %>%
+  mutate(
+    x1 = x^2 + x + 1 + rnorm(n, mean = 0, sd = 1),
+    x2 = x + rnorm(n, mean = 0, sd = 1),
+    y = x1 + rnorm(n, mean = 0, sd = 1)
+  )
+model_d <- c(list(N=n), as.list(d))
+
+# only x1 in model
+m1.1 <- stan(model_code = 
+  " 
+    data {
+    int N;
+    vector[N] x1;
+    vector[N] y;
+    }
+    
+    parameters {
+      real sigma;
+      real alpha;
+      real beta_1;
+    }
+    
+    model {
+      vector[N] mu;
+      mu = alpha + beta_1 * x1;
+      alpha ~ normal(0, 10);
+      beta_1 ~ normal(0, 10);
+      sigma ~ normal(0, 1);
+      y ~ normal(mu, sigma);
+    }", data = model_d
+)
+
+# only x2 in model
+m1.2 <- stan(model_code = 
+" 
+    data {
+      int N;
+      vector[N] x2;
+      vector[N] y;
+    }
+    parameters {
+      real sigma;
+      real alpha;
+      real beta_2;
+    }
+    model {
+      vector[N] mu;
+      mu = alpha + beta_2 * x2;
+      alpha ~ normal(0, 10);
+      beta_2 ~ normal(0, 10);
+      sigma ~ normal(0, 1);
+      y ~ normal(mu, sigma);
+    }
+    ",data = model_d
+)
+
+# both x1 and x2 in the model
+mboth<- stan(model_code = 
+" 
+    data {
+      int N;
+      vector[N] x1;
+      vector[N] x2;
+      vector[N] y;
+    }
+    parameters {
+      real sigma;
+      real alpha;
+      real beta_1;
+      real beta_2;
+    }
+    model {
+      vector[N] mu;
+      mu = alpha + beta_1 * x1 + beta_2 * x2;
+      alpha ~ normal(0, 10);
+      beta_1 ~ normal(0, 10);
+      beta_2 ~ normal(0, 10);
+      sigma ~ normal(0, 1);
+      y ~ normal(mu, sigma);
+    }
+    ", data = model_d
+)
+
+```
+```{r}
+pairs(d)
+precis(m1.1)
+precis(m1.2)
+precis(mboth)
+coeftab_plot(coeftab(m1.1, m1.2, mboth), par=c("beta_1", "beta_2"),  xlab="Estimate")
+```
+
+## Question 2
+Invent your own example of a masked relationship. An outcome variable should be correlated with both predictor variables, but in opposite directions. And the two predictor variables should be correlated with one another.
+
+<div class="answer">
+__Ans__<br>
+From the result, two predictor variables(x1 and x2) are negatively correlated with one another, y is correlated with x1 and y is correlated with x2 variables. When both variables put in the model, x2 changed to the opposite directions and both variables' coefficients increased. We found that variables x1 and x2 offset against each other in the individual regressions, which leads to omitted bias(the effects of these variables were masked). We can reveal their relationships by putting both variables in the model.
+</div>
+
+```{r}
+n <- 100
+d <- tibble(
+    x = runif(n, min=0, max=10)
+  ) %>%
+  mutate(
+    x1 = 6 * rnorm(n, mean = 1, sd = 1) * x,
+    x2 = (-2) * rnorm(n, mean = 1, sd = 1) * x,
+    y = x1 + x2 + rnorm(n, mean = 0, sd = 1)
+  )
+model_d <- c(list(N=n), as.list(d))
+cor(d$x1, d$x2)
+```
+
+```{r}
+# only x1 in the model
+m2.1 <- stan(model_code = " 
+    data {
+      int N;
+      vector[N] x1;
+      vector[N] y;
+    }
+    parameters {
+      real sigma;
+      real alpha;
+      real beta_1;
+    }
+    model {
+      vector[N] mu;
+      mu = alpha + beta_1 * x1;
+      alpha ~ normal(0, 10);
+      beta_1 ~ normal(0, 10);
+      sigma ~ normal(0, 1);
+      y ~ normal(mu, sigma);
+    }", data = model_d
+)
+                  
+# only x2 in the model
+m2.2 <- stan(model_code = " 
+    data {
+      int N;
+      vector[N] x2;
+      vector[N] y;
+    }
+    parameters {
+      real sigma;
+      real alpha;
+      real beta_2;
+    }
+    model {
+      vector[N] mu;
+      mu = alpha + beta_2 * x2;
+      alpha ~ normal(0, 10);
+      beta_2 ~ normal(0, 10);
+      sigma ~ normal(0, 1);
+      y ~ normal(mu, sigma);
+    }
+    ",
+    data = model_d
+)
+
+# both x1 and x2 in the model
+m2both <- stan(model_code = 
+" 
+    data {
+      int N;
+      vector[N] x1;
+      vector[N] x2;
+      vector[N] y;
+    }
+    parameters {
+      real sigma;
+      real alpha;
+      real beta_1;
+      real beta_2;
+    }
+    model {
+      vector[N] mu;
+      mu = alpha + beta_1 * x1 + beta_2 * x2;
+      alpha ~ normal(0, 10);
+      beta_1 ~ normal(0, 10);
+      beta_2 ~ normal(0, 10);
+      sigma ~ normal(0, 1);
+      y ~ normal(mu, sigma);
+    }
+    ", 
+    data = model_d
+)
+```
+
+```{r}
+pairs(d)
+precis(m2.1)
+precis(m2.2)
+precis(m2both)
+coeftab_plot(coeftab(m2.1, m2.2, m2both), par=c("beta_1", "beta_2"),  xlab="Estimate")
+```
+
+## Question 3
+Fit two bivariate Gaussian regressions: (1) body weight as a linear function of territory size (area), and (2) body weight as a linear function of groupsize. Plot the results of these regressions, displaying the MAP regression line and the 95% interval of the mean. Is either variable important for predicting fox body weight?
+
+<div class="answer">
+__Ans__<br>
+Based on only the bivariate regressions, neither territory area nor group size are very important for the prediction of body weight. The regression line of area is flatter when both predictors are visualized. The flatter line signifies that fewer changes are done through the change of the predictor.
+</div>
+
+```{r, result='hide'}
+#3(1) body weight as a linear function of territory size (area)
+data(foxes)
+d <- foxes
+
+m3.1 = "
+data {
+	int N; 
+	vector[N] x; 
+	vector[N] y;
+}
+
+parameters {
+	real alpha;
+	real beta;
+	real sigma;
+}
+
+model {
+	vector[N] mu = alpha + beta * x;
+	alpha ~ normal(5, 5);
+	beta ~ normal(0, 5);
+  sigma ~ uniform(0, 5);
+	y ~ normal(mu, sigma);
+}
+
+generated quantities {
+	real pred_y[N];
+  vector[N] mu;
+	mu = alpha + beta * x;
+	pred_y = normal_rng(mu, sigma);
+}
+"
+dat3.1 = list(
+  N = nrow(d),
+  x = d$area,
+  y = d$weight
+)
+fit3.1 = stan(model_code = m3.1,
+              data = dat3.1,
+              chains = 2,
+              iter = 1000,
+              cores = 2)  
+precis(fit3.1)
+post3.1 = as.data.frame(fit3.1)
+```
+
+```{r, result='hide'}
+pred_mu = post3.1 %>% select(contains("mu"))
+pred_y = post3.1 %>% select(contains("pred_y"))
+
+plt3.1 = data.frame(
+  mean = pred_mu %>% apply(., 2, mean),
+  L_HPDI = pred_mu %>% apply(., 2, HPDI, prob = 0.95) %>% .[1,],
+  H_HPDI = pred_mu %>% apply(., 2, HPDI, prob = 0.95) %>% .[2,],
+  area = d$area
+)
+
+plt3.1 <- plt3.1  %>% 
+  ggplot() +
+  geom_point(data = d, aes(area, weight), color="blue", alpha=.3) +
+  geom_line(aes(area, mean)) +
+  geom_ribbon(aes(x=area,ymin=L_HPDI, ymax=H_HPDI), alpha=.3) +
+  ggtitle("weight ~ area , 95% CI") 
+
+plt3.1
+
+```
+
+```{r, result='hide'}
+#3(2) body weight as a linear function of groupsize
+data(foxes)
+d <- foxes
+m3.2 = "
+data {
+	int N; 
+	vector[N] x; 
+	vector[N] y;
+}
+parameters {
+	real alpha;
+	real beta;
+	real sigma;
+}
+
+model {
+	vector[N] mu = alpha + beta * x;
+	alpha ~ normal(5, 5);
+	beta ~ normal(0, 5);
+  sigma ~ uniform(0, 5);
+	y ~ normal(mu, sigma);
+}
+
+generated quantities {
+	real pred_y[N];
+  vector[N] mu = alpha + beta * x;
+
+	mu = alpha + beta * x;
+	pred_y = normal_rng(mu, sigma);
+}
+"
+
+dat3.2 = list(
+  N = nrow(d),
+  x = d$groupsize,
+  y = d$weight
+)
+fit3.2 = stan(model_code = m3.2,
+              data = dat3.2,
+              chains = 2,
+              iter = 1000,
+              cores = 2)  
+post3.2 = as.data.frame(fit3.2) 
+```
+
+```{r, result='hide'}
+pred_mu = post3.2 %>% select(contains("mu"))
+pred_y = post3.2 %>% select(contains("pred_y"))
+
+plt3.2 = data.frame(
+  mean = pred_mu %>% apply(., 2, mean),
+  L_HPDI = pred_mu %>% apply(., 2, HPDI, prob = 0.95) %>% .[1,],
+  H_HPDI = pred_mu %>% apply(., 2, HPDI, prob = 0.95) %>% .[2,],
+  groupsize = d$groupsize
+)
+
+plt3.2 <-plt3.2 %>% 
+  ggplot() +
+  geom_point(data = d, aes(groupsize, weight), color="blue", alpha=.3) +
+  geom_line(aes(groupsize, mean)) +
+  geom_ribbon(aes(x=groupsize, ymin=L_HPDI, ymax=H_HPDI), alpha=.3) +
+  ggtitle("weight ~ groupsize , 95% CI") 
+
+grid.arrange(plt3.1, plt3.2, ncol=2)
+```
+
+
+## Question 4
+Now fit a multiple linear regression with weight as the outcome and both area and groupsize as predictor variables. Plot the predictions of the model for each predictor, holding the other predictor constant at its mean. What does this model say about the importance of each variable? Why do you get different results than you got in the exercise just above?
+
+<div class="answer">
+__Ans__<br>
+The result of multiple regression model is different from the bivariate models. Based on multiple regression model, we can see that territory area is positively related to body weight: more area means more resources means heavier foxes.The group size is negatively related to body weight: bigger groups for a given territory size means less food per animal, which means lighter foxes.
+This reflect a masking relationship: territory area is positively related to body weight and group size is negatively related to body weight, but these effects get cancelled out in the bivariate regressions because territory area and group size are positively related.
+</div>
+```{r, result='hide'}
+data(foxes)
+d <- foxes
+
+m4 = "
+data {
+	int N;
+	vector[N] area;
+	vector[N] groupsize;
+	vector[N] weight;
+	real mean_area;
+	real mean_groupsize;
+}
+parameters {
+	real alpha;
+	real beta_area;
+	real beta_groupsize;
+	real sigma;
+}
+model {
+	vector[N] mu;
+	mu = alpha + beta_area * area + beta_groupsize * groupsize;
+	weight ~ normal(mu, sigma);
+
+	alpha ~ normal(5, 5);
+	beta_area ~ normal(0, 5);
+	beta_groupsize ~ normal(0, 5);
+	sigma ~ uniform(0, 5);
+}
+generated quantities {
+	// model1 : see area, groupsize at mean
+	vector[N] pred_mu_1;
+	real pred_y_1[N];
+
+	// model2 : see groupsize, area at mean
+	vector[N] pred_mu_2;
+	real pred_y_2[N];
+
+	// model 3 : all
+	vector[N] pred_mu_3;
+	real pred_y_3[N];
+
+	// model 1
+	pred_mu_1 = alpha + beta_area * area + beta_groupsize * mean_groupsize;
+	pred_y_1 = normal_rng(pred_mu_1, sigma);
+
+	// model 2
+	pred_mu_2 = alpha + beta_area * mean_area + beta_groupsize * groupsize;
+	pred_y_2 = normal_rng(pred_mu_2, sigma);
+	
+	// model 3
+	pred_mu_3 = alpha + beta_area * area + beta_groupsize * groupsize;
+	pred_y_3 = normal_rng(pred_mu_3, sigma);
+}
+
+"
+dat4 = list(N = nrow(d), 
+              area = d$area,
+              groupsize = d$groupsize,
+              weight = d$weight,
+              mean_area = mean(d$area),
+              mean_groupsize = mean(d$groupsize))
+fit4 = stan(model_code = m4,
+              data = dat4,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post4 = as.data.frame(fit4)
+precis(fit4)
+```
+
+
+```{r, result='hide'}
+post4 = as.data.frame(fit4)
+pred_mu_1 = post4 %>% select(contains("pred_mu_1")) 
+result4 = data.frame(
+  pred = pred_mu_1 %>% apply(., 2, mean),
+  CI_lower = pred_mu_1 %>% apply(., 2, HPDI) %>% .[1,],
+  CI_upper = pred_mu_1 %>% apply(., 2, HPDI) %>% .[2,]
+)
+
+plt4.1 <- result4 %>% 
+  ggplot() +
+  geom_point(data = d, aes(area, weight), color="blue", alpha=.3) +
+  geom_line(aes(d$area, pred)) +
+  geom_ribbon(aes(d$area, ymin=CI_lower, ymax=CI_upper), alpha=.6) +
+  labs(x="area", y="weight", 
+       title = "Weight ~ area | groupsize at mean")
+```
+```{r}
+pred_mu_2 = post4 %>% select(contains("pred_mu_2")) 
+result4.2 = data.frame(
+  pred = pred_mu_2 %>% apply(., 2, mean),
+  CI_lower = pred_mu_2 %>% apply(., 2, HPDI) %>% .[1,],
+  CI_upper = pred_mu_2 %>% apply(., 2, HPDI) %>% .[2,]
+)
+
+plt4.2 <- result4.2 %>% 
+  ggplot() +
+  geom_point(data = d, aes(area, weight), color="blue", alpha=.3) +
+  geom_line(aes(d$groupsize, pred)) +
+  geom_ribbon(aes(d$groupsize, ymin=CI_lower, ymax=CI_upper), alpha=.6) +
+  labs(x="area", y="weight", 
+       title = "Weight ~ groupsize | area at mean")
+grid.arrange(plt4.1, plt4.2, ncol=2)
+```
+```{r}
+ plot( groupsize ~ area , data=d , col="slateblue")
+```
+
+
+## Question 5
+Finally, consider the avgfood variable. Fit two more multiple regressions: (1) body weight as an additive function of avgfood and groupsize, and (2) body weight as an additive function of all three variables, avgfood and groupsize and area. Compare the results of these models to the previous models you’ve fit, in the first two exercises. (a) Is avgfood or area a better predictor of body weight? If you had to choose one or the other to include in a model, which would it be? Support your assessment with any tables or plots you choose. (b) When both avgfood or area are in the same model, their effects are reduced (closer to zero) and their standard errors are larger than when they are included in separate models. Can you explain this result?
+
+<div class="answer">
+__Ans__<br>
+This model shows a large positive relationship between average food and body weight and a negative relationship between group size and body weight. The estimate for the group size slope is similar to that in the model with both territory area and group size. Thus, the masking effect on group size was overcome by including the average food variable. Perhaps average food and territory size are positively correlated (to have similar effects).
+</div>
+5(1)
+```{r, result='hide'}
+data(foxes)
+d <- foxes
+
+m5.1 = "
+data {
+	int N;
+	vector[N] avgfood;
+	vector[N] groupsize;
+	vector[N] weight;
+}
+parameters {
+	real alpha;
+	real beta_avgfood;
+	real beta_groupsize;
+	real sigma;
+}
+model {
+	vector[N] mu;
+	mu = alpha + beta_avgfood * avgfood + beta_groupsize * groupsize;
+	weight ~ normal(mu, sigma);
+
+	alpha ~ normal(5, 5);
+	beta_avgfood ~ normal(0, 5);
+	beta_groupsize ~ normal(0, 5);
+	sigma ~ uniform(0, 5);
+}
+generated quantities {
+	// model 1
+	vector[N] pred_mu_1;
+	real pred_y_1[N];
+
+	// model 1
+	pred_mu_1 = alpha + beta_avgfood * avgfood + beta_groupsize * groupsize;
+	pred_y_1 = normal_rng(pred_mu_1, sigma);
+
+}
+
+"
+dat5.1 = list(N = nrow(d), 
+              avgfood = d$avgfood,
+              groupsize = d$groupsize,
+              weight = d$weight)
+
+fit5.1 = stan(model_code = m5.1,
+              data = dat5.1,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+post5.1 = as.data.frame(fit5.1)
+precis(fit5.1)
+```
+
+5(2)
+```{r, result='hide'}
+data(foxes)
+d <- foxes
+
+m5.2 = "
+data {
+	int N;
+	vector[N] avgfood;
+	vector[N] groupsize;
+	vector[N] area;
+	vector[N] weight;
+}
+parameters {
+	real alpha;
+	real beta_avgfood;
+	real beta_groupsize;
+	real beta_area;
+	real sigma;
+}
+model {
+	vector[N] mu;
+	mu = alpha + beta_avgfood * avgfood + beta_groupsize * groupsize + beta_area * area;
+	weight ~ normal(mu, sigma);
+
+	alpha ~ normal(5, 5);
+	beta_avgfood ~ normal(0, 5);
+	beta_groupsize ~ normal(0, 5);
+	beta_area ~ normal(0, 5);
+	sigma ~ uniform(0, 5);
+}
+generated quantities {
+	// model 2
+	vector[N] pred_mu_2;
+	real pred_y_2[N];
+
+	// model 2
+	pred_mu_2 = alpha + beta_avgfood * avgfood + beta_groupsize * groupsize + beta_area * area;
+	pred_y_2 = normal_rng(pred_mu_2, sigma);
+}
+"
+dat5.2 = list(N = nrow(d), 
+              avgfood = d$avgfood,
+              groupsize = d$groupsize,
+              area = d$area,
+              weight = d$weight)
+
+fit5.2 = stan(model_code = m5.2,
+              data = dat5.2,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post5.2 = as.data.frame(fit5.2)
+precis(fit5.2)
+```
+
+```{r, result='hide'}
+data(foxes)
+d <- foxes
+
+m5.3 = "
+data {
+	int N;
+	vector[N] avgfood;
+	vector[N] groupsize;
+	vector[N] weight;
+}
+parameters {
+	real alpha;
+	real beta_avgfood;
+	real beta_groupsize;
+	real sigma;
+}
+model {
+	// model
+	vector[N] mu = alpha + beta_avgfood * avgfood + beta_groupsize * groupsize;
+	weight ~ normal(mu, sigma);
+
+	// prior
+	alpha ~ normal(5, 5);
+	beta_avgfood ~ normal(0, 5);
+	beta_groupsize ~ normal(0, 5);
+	sigma ~ uniform(0, 5);
+}
+generated quantities {
+	// model 3
+	vector[N] pred_mu_3;
+	real pred_y_3[N];
+
+	// model 3
+	pred_mu_3 = alpha + beta_avgfood * avgfood + beta_groupsize * groupsize;
+	pred_y_3 = normal_rng(pred_mu_3, sigma);
+
+}
+
+"
+dat5.3 = list(N = nrow(d), 
+              avgfood = d$avgfood,
+              groupsize = d$groupsize,
+              weight = d$weight)
+
+fit5.3 = stan(model_code = m5.3,
+              data = dat5.1,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+post5.3 = as.data.frame(fit5.3)
+precis(fit5.3)
+```
+<div class="answer">
+__Ans__<br>
+This model is similar to the previous one in terms of the group size slope, so we have again addressed the masking relationship problem. However, the estimates of the average food and territory area slopes have decreased in magnitude compared to previous models. This is likely due to multicollinearity between the two variables.
+In response to question (a), I think average food and territory area are both fine predictors of body weight. However, given their high positive correlation with one another and similar relationships with body weight, I would not include both in the same model. To select between them, I might favor the one with the larger standardized slope estimate.
+</div>
+
+```{r, result='hide'}
+d$avgfood_z <- (d$avgfood - mean(d$avgfood)) / sd(d$avgfood)
+
+m5.4 = "
+data {
+	int N;
+	vector[N] avgfood_z;
+	vector[N] groupsize;
+	vector[N] weight;
+}
+parameters {
+	real alpha;
+	real beta_avgfood_z;
+	real beta_groupsize;
+	real sigma;
+}
+model {
+	// model
+	vector[N] mu = alpha + beta_avgfood_z * avgfood_z + beta_groupsize * groupsize;
+	weight ~ normal(mu, sigma);
+
+	// prior
+	alpha ~ normal(5, 5);
+	beta_avgfood_z ~ normal(0, 5);
+	beta_groupsize ~ normal(0, 5);
+	sigma ~ uniform(0, 5);
+}
+generated quantities {
+	// model 4
+	vector[N] pred_mu_4;
+	real pred_y_4[N];
+
+	// model 4
+	pred_mu_4 = alpha + beta_avgfood_z * avgfood_z + beta_groupsize * groupsize;
+	pred_y_4 = normal_rng(pred_mu_4, sigma);
+
+}
+
+"
+dat5.4 = list(N = nrow(d), 
+              avgfood_z = d$avgfood_z,
+              groupsize = d$groupsize,
+              weight = d$weight)
+
+fit5.4 = stan(model_code = m5.4,
+              data = dat5.4,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+post5.4 = as.data.frame(fit5.4)
+precis(fit5.4)
+
+```
+
+```{r, result='hide'}
+d$area_z <- (d$area - mean(d$area)) / sd(d$area)
+m5.5 = "
+data {
+	int N;
+	vector[N] area_z;
+	vector[N] groupsize;
+	vector[N] weight;
+}
+parameters {
+	real alpha;
+	real beta_area_z;
+	real beta_groupsize;
+	real sigma;
+}
+model {
+	// model
+	vector[N] mu = alpha + beta_area_z * area_z + beta_groupsize * groupsize;
+	weight ~ normal(mu, sigma);
+
+	// prior
+	alpha ~ normal(5, 5);
+	beta_area_z ~ normal(0, 5);
+	beta_groupsize ~ normal(0, 5);
+	sigma ~ uniform(0, 5);
+}
+generated quantities {
+	// model 5
+	vector[N] pred_mu_5;
+	real pred_y_5[N];
+
+	// model 5
+	pred_mu_5 = alpha + beta_area_z * area_z + beta_groupsize * groupsize;
+	pred_y_5 = normal_rng(pred_mu_5, sigma);
+
+}
+
+"
+dat5.5 = list(N = nrow(d), 
+              area_z = d$area_z,
+              groupsize = d$groupsize,
+              weight = d$weight)
+
+fit5.5 = stan(model_code = m5.5,
+              data = dat5.5,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+post5.5 = as.data.frame(fit5.5)
+precis(fit5.5)
+```
+<div class="answer">
+__Ans__<br>
+From the result, it looks like average food would be preferable to territory area.
+In response to (b), this result is likely due to multicollinearity between average food and territory area. The two variables are highly correlated and have very similar relationships with body weight. Thus, the partial effect of each becomes smaller (when control for the other).
+</div>
+
+## Question 6
+Explain the difference between model selection and model comparison. What information is lost under model selection?
+<div class="answer">
+__Ans__<br>
+From wiki, model selection is the task of selecting a statistical model from a set of candidate models, given data, ranking models by information criteria and choosing the highest ranked model. 
+From textbook, model selection usually means choosing the model with the lowest AIC/DIC/WAIC value and then discarding the others. But model selection procedure discards the information about relative model accuracy contained in the differences among the AIC/DIC/WAIC values, which means model selection discards information about model uncertainty.  Sometimes the differences are large and sometimes they are small. Just as relative posterior probability provides advice about how confident we might be about parameters (conditional on the model), relative model accuracy provides advice about how confident we might be about models (conditional on the set of models compared).
+
+Model comparison is to use Bayesian information criteria to construct a posterior predictive distribution that leverages the uncertainty in multiple models, which means using DIC/WAIC in combination with the estimates and posterior predictive checks from each model. It is just as important to understand why a model outperforms another as it is to measure the performance difference. This measure might lead to spurious findings. DIC/WAIC alone says very little about such details. But in combination with other information, DIC/WAIC is a big help.
+</div>
+
+
+## Question 7
+When comparing models with an information criterion, why must all models be fit to exactly the same observation? What would happen to the information criterion values, if the models were fit to different numbers of observations? Perform some experiments, if you are not sure.
+
+<div class="answer">
+__Ans__<br>
+All models should be fit to exactly the same observation when comparing models with an information criterion, as the information criterion is based on the actual oberservation cases. The model with more observation would have higher deviance and thus worse accuracy. The information criteria should decrease alongside the sample size, if the models were fit to different numbers of observation. Information criteria are based on deviance, which is accrued over observations without being divided by the number of observations. Thus, it is a sum and not an average. So, all else being equal, a model with more observations will have a higher deviance and thus worse accuracy according to information criteria. It would be an unfair comparison to contrast models fit to different numbers of observations.
+
+We can calculate WAIC for models fit to increasingly small subsamples of the same data. The information criteria should decrease alongside the sample size. In order to get a large sample to begin with, I will return perform the Howell1 database.
+</div>
+```{r, result='hide'}
+d <-data(Howell1)
+d <- Howell1[complete.cases(Howell1), ]
+d_500 <- d[sample(1:nrow(d), size = 500, replace = FALSE), ]
+d_300 <- d[sample(1:nrow(d), size = 300, replace = FALSE), ]
+```
+
+```{r}
+m300 = "
+data {
+	int N; 
+	vector[N] x; 
+	vector[N] y;
+}
+
+parameters {
+	real alpha;
+	real beta;
+	real sigma;
+}
+
+model {
+	// model
+	vector[N] mu = alpha + beta * x;
+
+	alpha ~ normal(138, 100);
+	beta ~ lognormal(0, 1);
+	sigma ~ uniform(0, 50);
+	
+	y ~ normal(mu, sigma);
+}
+
+generated quantities {
+  real pred_y[N];
+  vector[N] mu = alpha + beta * x;
+  vector[N] log_lik;
+
+	mu = alpha + beta * x;
+	pred_y = normal_rng(mu, sigma);
+	for (i in 1:N){
+    log_lik[i] = normal_lpdf(y[i] | mu[i], sigma);
+	}
+}
+"
+dat300 = list(N = nrow(d_300), 
+              x = d_300$weight,
+              y = d_300$height)
+
+fit300 = stan(model_code = m300,
+              data = dat300,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post300 = as.data.frame(fit300)
+```
+
+```{r, result='hide'}
+m500 = "
+data {
+	int N; 
+	vector[N] x; 
+	vector[N] y;
+}
+
+parameters {
+	real alpha;
+	real beta;
+	real sigma;
+}
+
+model {
+	// model
+	vector[N] mu = alpha + beta * x;
+
+	alpha ~ normal(138, 100);
+	beta ~ lognormal(0, 1);
+	sigma ~ uniform(0, 50);
+	
+	y ~ normal(mu, sigma);
+}
+
+generated quantities {
+  real pred_y[N];
+  vector[N] mu = alpha + beta * x;
+  vector[N] log_lik;
+
+	mu = alpha + beta * x;
+	pred_y = normal_rng(mu, sigma);
+	for (i in 1:N){
+    log_lik[i] = normal_lpdf(y[i] | mu[i], sigma);
+	}
+}
+"
+dat500 = list(N = nrow(d_500), 
+              x = d_500$weight,
+              y = d_500$height)
+
+fit500 = stan(model_code = m500,
+              data = dat500,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post500 = as.data.frame(fit500)
+```
+```{r}
+rethinking::compare(fit300, fit500)
+```
+<div class="answer">
+__Ans__<br>
+The WAIC increased from the N=300 model to the N=500 model. That's because information criteria includes the sum of deviance without averaging by its number of observations. While providing all else are equal, a model with more observations will have a greater sum of deviance, so the comparison will be meaningless. Besides, the comparison also returns a warning about the number of observations being different.
+</div>
+
+
+## Question 8
+What happens to the effective number of parameters, as measured by PSIS (Google: Pareto- smoothed importance sampling cross-validation and run ?PISI in R) or WAIC, as a prior becomes more concentrated? Why? Perform some experiments, if you are not sure.
+
+<div class="answer">
+__Ans__<br>
+As the prior becomes more concentrated, the effective number of parameters decreases. Because WAIC is a measure of the variance in the log-likelihood for each observation in the training sample, with more concentrated priors, the likelihood will become more concentrated as well and thus variance will decrease. The following is WAIC and PSIS for two models with the same data but different concentration of priors, the pWAIC and PSIS decreases as the priors become more concentrated. 
+</div>
+
+```{r}
+d <- Howell1[complete.cases(Howell1), ]
+d$height.log <- log(d$height)
+d$height.log.z <- (d$height.log - mean(d$height.log)) / sd(d$height.log)
+d$weight.log <- log(d$weight)
+d$weight.log.z <- (d$weight.log - mean(d$weight.log)) / sd(d$weight.log)
+```
+
+```{r, result='hide'}
+#weak prior
+m8.1 = "
+data {
+	int N; 
+	vector[N] x; 
+	vector[N] y;
+}
+
+parameters {
+	real alpha;
+	real beta;
+	real sigma;
+}
+
+model {
+	vector[N] mu = alpha + beta * x;
+	alpha ~ normal(0, 10);
+	beta ~ normal(1, 10);
+	sigma ~ uniform(0, 10);
+	y ~ normal(mu, sigma);
+}
+
+generated quantities {
+  real pred_y[N];
+  vector[N] mu = alpha + beta * x;
+  vector[N] log_lik;
+
+	mu = alpha + beta * x;
+	pred_y = normal_rng(mu, sigma);
+	for (i in 1:N){
+    log_lik[i] = normal_lpdf(y[i] | mu[i], sigma);
+	}
+}
+"
+dat8.1 = list(N = nrow(d), 
+              x = d$weight.log.z,
+              y = d$height.log.z)
+
+fit8.1 = stan(model_code = m8.1,
+              data = dat8.1,
+              iter = 4000,
+              cores = 2,
+              chains = 2)
+
+post8.1 = as.data.frame(fit8.1)
+```
+```{r, result='hide'}
+#prior concentrate
+m8.2 = "
+data {
+	int N; 
+	vector[N] x; 
+	vector[N] y;
+}
+
+parameters {
+	real alpha;
+	real beta;
+	real sigma;
+}
+
+model {
+	vector[N] mu = alpha + beta * x;
+	alpha ~ normal(0, 0.1);
+	beta ~ normal(1, 0.1);
+	sigma ~ uniform(0, 1);
+	y ~ normal(mu, sigma);
+}
+
+generated quantities {
+  real pred_y[N];
+  vector[N] mu = alpha + beta * x;
+  vector[N] log_lik;
+
+	mu = alpha + beta * x;
+	pred_y = normal_rng(mu, sigma);
+	for (i in 1:N){
+    log_lik[i] = normal_lpdf(y[i] | mu[i], sigma);
+	}
+}
+"
+dat8.2 = list(N = nrow(d), 
+              x = d$weight.log.z,
+              y = d$height.log.z)
+
+fit8.2 = stan(model_code = m8.2,
+              data = dat8.2,
+              iter = 4000,
+              cores = 2,
+              chains = 2)
+
+post8.2 = as.data.frame(fit8.2)
+```
+
+```{r}
+rethinking::compare(fit8.1, fit8.2)
+rethinking::compare(fit8.1, fit8.2, func="PSIS")
+```
+
+
+## Question 9
+In 200, The Wall Street Journal published an editorial (“We’re Number One, Alas”) with a graph of corporate tax rate in 29 countries plotted against tax revenue. A badly fit curve was drawn in (reconstructed at right), seemingly by hand, to make the argument that the relationship between tax rates and tax revenue increases and then declines, such that higher tax rate can actually produce less tax revenue. I want you to actually fit a curve to these data, found in data(Laffer). Consider models that use tax rate to predict tax revenue. Compare, using WAIC or PSIS, a straight-line model to any curved models you like. What do you conclude about the relationship between tax rate and tax revenue.
+
+<div class="answer">
+__Ans__<br>
+The quadratic model of fits a little better in both WAIC and PSIS, the difference between the two models is not big. Besides, the 2nd degree effect of tax rate is approximately zero. The Laffer Curve is not supported by this data set.
+</div>
+
+```{r, result='hide'}
+data(Laffer)
+d <- Laffer
+d$Rate <- standardize(d$tax_rate)
+d$Revenue <- standardize(d$tax_revenue)
+d
+
+#linear
+m9.1 = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] Rate;
+}
+parameters {
+	real alpha;
+	real beta_Rate;
+	real sigma;
+}
+model {
+	vector[N] mu = alpha + beta_Rate * Rate;
+	Revenue ~ normal(mu, sigma);
+	alpha ~ normal(0, 0.2);
+	beta_Rate ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	// model 
+	vector[N] pred_mu_1;
+	real pred_y_1[N];
+	vector[N] log_lik; //comparison
+
+	// model 1
+	pred_mu_1 = alpha + beta_Rate * Rate;
+	pred_y_1 = normal_rng(pred_mu_1, sigma);
+	for (i in 1:N){
+    log_lik[i] = normal_lpdf(Revenue[i] | pred_mu_1[i], sigma);
+	}
+}
+"
+dat9.1 = list(N = nrow(d), 
+              Rate = d$Rate,
+              Revenue = d$Revenue)
+
+fit9.1 = stan(model_code = m9.1,
+              data = dat9.1,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post9.1 = as.data.frame(fit9.1)
+```
+```{r, result='hide'}
+#quadratic
+m9.2 = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] RateA;
+	vector[N] RateB;
+}
+parameters {
+	real alpha;
+	real beta_RateA;
+	real beta_RateB;
+	real sigma;
+}
+model {
+	vector[N] mu = alpha + beta_RateA * RateA + beta_RateB * RateB .* RateB;
+	Revenue ~ normal(mu, sigma);
+
+	alpha ~ normal(0, 0.2);
+	beta_RateA ~ normal(0, 0.5);
+	beta_RateB ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	// model 
+	vector[N] pred_mu_2;
+	real pred_y_2[N];
+	vector[N] log_lik;
+
+	// model 2
+	pred_mu_2 = alpha + beta_RateA * RateA + beta_RateB * RateB .* RateB;
+	pred_y_2 = normal_rng(pred_mu_2, sigma);
+		for (i in 1:N){
+    log_lik[i] = normal_lpdf(Revenue[i] | pred_mu_2[i], sigma);
+	}
+}
+
+"
+dat9.2 = list(N = nrow(d), 
+              RateA = d$Rate,
+              RateB = d$Rate,
+              Revenue = d$Revenue)
+
+fit9.2 = stan(model_code = m9.2,
+              data = dat9.2,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post9.2 = as.data.frame(fit9.2)
+```
+
+
+```{r, result='hide'}
+#cubic
+m9.3 = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] RateA;
+	vector[N] RateB;
+}
+parameters {
+	real alpha;
+	real beta_RateA;
+	real beta_RateB;
+	real sigma;
+}
+model {
+	vector[N] mu = alpha + beta_RateA * RateA + beta_RateB * RateB .* RateB .* RateB;
+	Revenue ~ normal(mu, sigma);
+
+	alpha ~ normal(0, 0.2);
+	beta_RateA ~ normal(0, 0.5);
+	beta_RateB ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	vector[N] pred_mu_3;
+	real pred_y_3[N];
+	vector[N] log_lik;
+
+	pred_mu_3 = alpha + beta_RateA * RateA + beta_RateB * RateB .* RateB .* RateB;
+	pred_y_3 = normal_rng(pred_mu_3, sigma);
+	for (i in 1:N){
+    log_lik[i] = normal_lpdf(Revenue[i] | pred_mu_3[i], sigma);
+	}
+}
+"
+dat9.3 = list(N = nrow(d), 
+              RateA = d$Rate,
+              RateB = d$Rate,
+              Revenue = d$Revenue)
+
+fit9.3 = stan(model_code = m9.3,
+              data = dat9.3,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post9.3 = as.data.frame(fit9.3)
+```
+```{r}
+rethinking::compare(fit9.1, fit9.2, fit9.3)
+rethinking::compare(fit9.1, fit9.2, fit9.3, func="PSIS")
+```
+
+plot model
+```{r}
+pred_mu_1 = post9.1 %>% select(contains("pred_mu_1")) 
+pred_y_1 = post9.1 %>% select(contains("pred_y_1"))
+
+result9.1 = data.frame(
+  pred = pred_mu_1 %>% apply(., 2, mean),
+  CI_lower = pred_mu_1 %>% apply(., 2, HPDI) %>% .[1,],
+  CI_upper = pred_mu_1 %>% apply(., 2, HPDI) %>% .[2,],
+  PI_lower = pred_y_1 %>% apply(., 2, HPDI) %>% .[1,],
+  PI_upper = pred_y_1 %>% apply(., 2, HPDI) %>% .[2,]
+)
+
+result9.1 %>% 
+  ggplot() +
+  geom_point(data = d, aes(Rate, Revenue), color="blue", alpha=.3) +
+  geom_line(aes(d$Rate, pred)) +
+  geom_ribbon(aes(d$Rate, ymin=CI_lower, ymax=CI_upper), alpha=.6) +
+  geom_ribbon(aes(d$Rate, ymin=PI_lower, ymax=PI_upper), alpha=.3) +
+  labs(x="Rate", y="Revenue", 
+       title = "Linear")
+```
+```{r}
+pred_mu_2 = post9.2 %>% select(contains("pred_mu_2")) 
+pred_y_2 = post9.2 %>% select(contains("pred_y_2"))
+
+result9.2 = data.frame(
+  pred = pred_mu_2 %>% apply(., 2, mean),
+  CI_lower = pred_mu_2 %>% apply(., 2, HPDI) %>% .[1,],
+  CI_upper = pred_mu_2 %>% apply(., 2, HPDI) %>% .[2,],
+  PI_lower = pred_y_2 %>% apply(., 2, HPDI) %>% .[1,],
+  PI_upper = pred_y_2 %>% apply(., 2, HPDI) %>% .[2,]
+)
+
+result9.2 %>% 
+  ggplot() +
+  geom_point(data = d, aes(Rate, Revenue), color="blue", alpha=.3) +
+  geom_line(aes(d$Rate, pred)) +
+  geom_ribbon(aes(d$Rate, ymin=CI_lower, ymax=CI_upper), alpha=.6) +
+  geom_ribbon(aes(d$Rate, ymin=PI_lower, ymax=PI_upper), alpha=.3) +
+  labs(x="Rate", y="Revenue", 
+       title = "Quadratic")
+```
+```{r}
+pred_mu_3 = post9.3 %>% select(contains("pred_mu_3")) 
+pred_y_3 = post9.3 %>% select(contains("pred_y_3"))
+
+result9.3 = data.frame(
+  pred = pred_mu_3 %>% apply(., 2, mean),
+  CI_lower = pred_mu_3 %>% apply(., 2, HPDI) %>% .[1,],
+  CI_upper = pred_mu_3 %>% apply(., 2, HPDI) %>% .[2,],
+  PI_lower = pred_y_3 %>% apply(., 2, HPDI) %>% .[1,],
+  PI_upper = pred_y_3 %>% apply(., 2, HPDI) %>% .[2,]
+)
+
+result9.3 %>% 
+  ggplot() +
+  geom_point(data = d, aes(Rate, Revenue), color="blue", alpha=.3) +
+  geom_line(aes(d$Rate, pred)) +
+  geom_ribbon(aes(d$Rate, ymin=CI_lower, ymax=CI_upper), alpha=.6) +
+  geom_ribbon(aes(d$Rate, ymin=PI_lower, ymax=PI_upper), alpha=.3) +
+  labs(x="Rate", y="Revenue", 
+       title = "Cubic")
+
+```
+
+## Question 10
+In the Laffer data, there is no country with a high tax revenue that is an outlier. Use PSIS and WAIC to measure the importance of this outlier in the models you fit in the previous problem. Then use robust regression with a Student’s t distribution to revisit the curve fitting problem. How much dose a curved relationship depend upon the outlier point?
+
+<div class="answer">
+__Ans__<br>
+When we remove the outlier, we obtain a warning message, just like the above exercise.
+From the result, robust regression made our models perform better across the board. (Because it's meaningless to compare the model without outlier with other models, so even it looks the best one, we don't discuss it.)
+</div>
+
+```{r}
+##remove outlier
+data(Laffer)
+d <- Laffer
+d$Rate <- standardize(d$tax_rate)
+d$Revenue <- standardize(d$tax_revenue)
+d <- d[d$tax_revenue != max(d$tax_revenue), ] # removing the outlier
+
+#linear model and remove outlier
+m10.1r = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] Rate;
+}
+parameters {
+	real alpha;
+	real beta_Rate;
+	real sigma;
+}
+model {
+	vector[N] mu = alpha + beta_Rate * Rate;
+	Revenue ~ normal(mu, sigma);
+
+	alpha ~ normal(0, 0.2);
+	beta_Rate ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	// model 
+	vector[N] pred_mu_1r;
+	real pred_y_1r[N];
+	vector[N] log_lik;
+
+	// model 1r
+	pred_mu_1r = alpha + beta_Rate * Rate;
+	pred_y_1r = normal_rng(pred_mu_1r, sigma);
+  for (i in 1:N){
+    log_lik[i] = normal_lpdf(Revenue[i] | pred_mu_1r[i], sigma);
+	}
+}
+
+"
+dat10.1r = list(N = nrow(d), 
+              Rate = d$Rate,
+              Revenue = d$Revenue)
+
+fit10.1r = stan(model_code = m10.1r,
+              data = dat10.1r,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post10.1r = as.data.frame(fit10.1r)
+```
+
+```{r}
+#quadratic model and remove outlier
+m10.2r = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] Rate;
+}
+parameters {
+	real alpha;
+	real beta_Rate;
+	real sigma;
+}
+model {
+	// model
+	vector[N] mu = alpha + beta_Rate * Rate .* Rate;
+	Revenue ~ normal(mu, sigma);
+
+	// prior
+	alpha ~ normal(0, 0.2);
+	beta_Rate ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	// model 
+	vector[N] pred_mu_2r;
+	real pred_y_2r[N];
+	vector[N] log_lik;
+
+	// model 2r
+	pred_mu_2r = alpha + beta_Rate * Rate .* Rate;
+	pred_y_2r = normal_rng(pred_mu_2r, sigma);
+  for (i in 1:N){
+    log_lik[i] = normal_lpdf(Revenue[i] | pred_mu_2r[i], sigma);
+	}
+}
+"
+dat10.2r = list(N = nrow(d), 
+              Rate = d$Rate,
+              Revenue = d$Revenue)
+
+fit10.2r = stan(model_code = m10.2r,
+              data = dat10.2r,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post10.2r = as.data.frame(fit10.2r)
+```
+
+```{r}
+#cubic model and remove outlier
+m10.3r = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] Rate;
+}
+parameters {
+	real alpha;
+	real beta_Rate;
+	real sigma;
+}
+model {
+	// model
+	vector[N] mu = alpha + beta_Rate * Rate .* Rate .* Rate;
+	Revenue ~ normal(mu, sigma);
+
+	// prior
+	alpha ~ normal(0, 0.2);
+	beta_Rate ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	// model 
+	vector[N] pred_mu_3r;
+	real pred_y_3r[N];
+	vector[N] log_lik;
+
+	// model 3r
+	pred_mu_3r = alpha + beta_Rate * Rate .* Rate .* Rate;
+	pred_y_3r = normal_rng(pred_mu_3r, sigma);
+  for (i in 1:N){
+    log_lik[i] = normal_lpdf(Revenue[i] | pred_mu_3r[i], sigma);
+	}
+}
+"
+dat10.3r = list(N = nrow(d), 
+              Rate = d$Rate,
+              Revenue = d$Revenue)
+
+fit10.3r = stan(model_code = m10.3r,
+              data = dat10.3r,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post10.3r = as.data.frame(fit10.3r)
+```
+
+
+//robust with outlier
+```{r}
+data(Laffer)
+d <- Laffer
+d$Rate <- standardize(d$tax_rate)
+d$Revenue <- standardize(d$tax_revenue)
+
+#linear
+m10.1t = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] Rate;
+	real nu;
+}
+parameters {
+	real alpha;
+	real beta_Rate;
+	real sigma;
+}
+model {
+	// model
+	vector[N] mu = alpha + beta_Rate * Rate;
+	Revenue ~ student_t(nu, mu, sigma);
+
+	// prior
+	alpha ~ normal(0, 0.2);
+	beta_Rate ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	// model
+	vector[N] pred_mu_1t;
+	real pred_y_1t[N];
+	vector[N] log_lik;
+	
+	// model 1t
+	pred_mu_1t = alpha + beta_Rate * Rate;
+	pred_y_1t = student_t_rng(nu, pred_mu_1t, sigma);
+	for (i in 1:N){
+    log_lik[i] = student_t_lpdf(Revenue[i] | nu, pred_mu_1t[i], sigma);
+	}
+}
+
+"
+dat10.1t = list(N = nrow(d),
+              Rate = d$Rate,
+              Revenue = d$Revenue,
+              nu=2)
+
+fit10.1t = stan(model_code = m10.1t,
+              data = dat10.1t,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post10.1t = as.data.frame(fit10.1t)
+```
+
+```{r}
+#quadratic
+m10.2t = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] Rate;
+	real nu;
+}
+parameters {
+	real alpha;
+	real beta_Rate;
+	real sigma;
+}
+model {
+	// model
+	vector[N] mu = alpha + beta_Rate * Rate .* Rate;
+	Revenue ~ student_t(nu, mu, sigma);
+
+	// prior
+	alpha ~ normal(0, 0.2);
+	beta_Rate ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	// model
+	vector[N] pred_mu_2t;
+	real pred_y_2t[N];
+	vector[N] log_lik;
+	// model 2t
+	pred_mu_2t = alpha + beta_Rate * Rate .* Rate;
+	pred_y_2t = student_t_rng(nu, pred_mu_2t, sigma);
+	for (i in 1:N){
+    log_lik[i] = student_t_lpdf(Revenue[i] | nu, pred_mu_2t[i], sigma);
+	}
+}
+
+"
+dat10.2t = list(N = nrow(d),
+              Rate = d$Rate,
+              Revenue = d$Revenue,
+              nu=2)
+
+fit10.2t = stan(model_code = m10.2t,
+              data = dat10.2t,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post10.2t = as.data.frame(fit10.2t)
+```
+
+```{r}
+#cubic
+m10.3t = "
+data {
+	int N;
+	vector[N] Revenue;
+	vector[N] Rate;
+	real nu;
+}
+parameters {
+	real alpha;
+	real beta_Rate;
+	real sigma;
+}
+model {
+	// model
+	vector[N] mu = alpha + beta_Rate * Rate .* Rate .* Rate;
+	Revenue ~ student_t(nu, mu, sigma);
+
+	// prior
+	alpha ~ normal(0, 0.2);
+	beta_Rate ~ normal(0, 0.5);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	// model
+	vector[N] pred_mu_3t;
+	real pred_y_3t[N];
+	vector[N] log_lik;
+	// model 3t
+	pred_mu_3t = alpha + beta_Rate * Rate .* Rate .* Rate;
+	pred_y_3t = student_t_rng(nu, pred_mu_3t, sigma);
+  for (i in 1:N){
+    log_lik[i] = student_t_lpdf(Revenue[i] | nu, pred_mu_3t[i], sigma);
+	}
+}
+
+"
+dat10.3t = list(N = nrow(d),
+              Rate = d$Rate,
+              Revenue = d$Revenue,
+              nu=2)
+
+fit10.3t = stan(model_code = m10.3t,
+              data = dat10.3t,
+              iter = 2000,
+              cores = 2,
+              chains = 2)
+
+post10.3t = as.data.frame(fit10.3t)
+```
+```{r}
+rethinking::compare(fit9.1, fit9.2, fit9.3, fit10.1r, fit10.2r, fit10.3r, fit10.1t, fit10.2t, fit10.3t)
+rethinking::compare(fit9.1, fit9.2, fit9.3, fit10.1r, fit10.2r, fit10.3r, fit10.1t, fit10.2t, fit10.3t, func = PSIS)
+```

@@ -1,0 +1,811 @@
+---
+title: "MA_HW3"
+author: "Judy Ou"
+date: "3/28/2021"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+<style>
+  .answer {color: blue}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+library(tidyverse)
+library(rethinking)
+library(rstan)
+library(arulesViz)
+library(gridExtra)
+library(coefplot)
+```
+
+## Question 1
+For each of the causal relationships below, name a hypothetical third variable that would lead to an interaction effect.
+(1) Bread dough rises because of yeast.
+(2) Education leads to higher income.
+(3) Gasoline makes a car go.
+
+<div class="answer">
+__Ans__<br>
+(1) Temperature. If the temperature is too high, the yeast dies. If the temperature is too cold, dough rising will slow down, so within a certain temperature, as the temperature is higher, dough rising will be faster. We can say that there is an interaction between temperature and yeast.
+
+(2) (High) quality of education/some kinds of major. (High) quality of education/some kinds of major may potentially strengthen the impact of education in income, like major in Dentistry may lead to higher income than others. We can say that there is an interaction between major and income, and also there is an interaction between quality of education and income.
+
+(3) Age of the car/weight of car. Age of the car will influence how far a car can go with one liter of gasoline. By the condition of the same gasoline, younger car/lighter car may go faster than older car/heavier car. We can say that there is an interaction between age of the car and how far a car can go with one liter of gasoline, and also there is an interaction between weight of car and how far a car can go with one liter of gasoline
+</div>
+
+## Question 2
+Which of the following explanations invokes an interaction?
+(1) Caramelizing onion requires cooking over low heat and making sure the onions do not dry out.
+(2) A car will go faster when it has more cylinders or when it has a better fuel injector.
+(3) Most people acquire their political beliefs from their parents, unless they get them instead from their friends.
+(4) Intelligent animal species tend to be either highly social or have manipulative appendages (hand, tentacles, etc.)
+
+<div class="answer">
+__Ans__<br>
+(1) is a strict interaction, (3) and (4) will be an interaction by condition.
+
+(1) Caramelizing invokes an interaction between heat and dryness because the effect of heat depends on moisture. This implies caramelization will only occur when both heat and dryness are low.
+
+(2) No interaction. Even though the car has more cylinders, it doesn't mean the car will go faster because more cylinders means the more air intake it can have(有越多進氣可以排氣), but it can't make the car go faster.
+Better fuel injector also doesn't mean the car will go faster. There is no interaction between cylinders or fuel injector ans car speed.
+
+(3) This description invokes an interaction if someone get their political beliefs from their friends and at the same time they don’t get it from their parents. Another cases is someone get their political beliefs from their parents and at the same time they don’t get it from their friends.
+
+(4) If "highly social or have manipulative appendages" contains an "exclusive or”, species’ intelligence invokes an interaction between sociality and  manipulative appendages. It seems to imply that intelligent species are highly social or have manipulative appendages but are not both high on sociality and in possession of manipulative appendages.
+</div>
+
+
+## Question 3
+For each of the explanations in 2., write a linear model that expresses the stated relationship.
+
+(1) $Caramelized_i \sim Normal(\mu_i, \sigma)$
+
+    $\mu_i = \alpha + \beta_HH_i + \beta_DD + \beta_{HD}H_iD_i$     (H:heat, D:dryness)
+
+(2) $Max Speed_i \sim Normal(\mu_i, \sigma)$
+
+    $\mu_i = \alpha + \beta_CC_i + \beta_FF_i$     (C:cylinders, F:fuel injector)
+
+(3) $Belief_i \sim Normal(\mu_i, \sigma)$
+
+    $\mu_i = \alpha + \beta_{BP}P_i(1-B_i) + \beta_{BF}F_iB_i$     (B:belief, P:parent, F:friend)
+
+(4) $Intelligence_i \sim Normal(\mu_i, \sigma)$
+    
+    $\mu_i = \alpha + \beta_SS_i + \beta_AA_i$     (S:sociality, A:appendages)
+
+
+## Question 4
+Recall the tulips example from ch7. Suppose another set of treatments adjusted the
+temperature in the greenhouse over two levels: cold and hot. The data in the chapter were collected at the cold temperature. You find none of the plants grown under the hot temperature developed any blooms at all, regardless of the water and shade levels. Can you explain this result in terms of interactions between water, shade, and temperature?
+
+<div class="answer">
+__Ans__<br>
+Tulips are usually bloom in winter, so high temperature would hurt them (would not bloom). The question is stating that the relationships between blossoms and water and between blossoms and shade depend on the value of temperature. But we still can say that there is also a two-way and three-way interaction: the influence of water and shade depend on one another, and both and their interaction depend upon temperature. Since there are three predictor variables (water, shade, and temperature), we would have interactions of WST, WS, WT, and ST.
+</div>
+
+## Question 5
+Can you invent a regression equation that would make the bloom size zero, whenever the temperature is hot?
+
+<div class="answer">
+__Ans__<br>
+$\mu_i = \alpha + \beta_WW_i + \beta_SS_i + \beta_TT_i + \beta_{WS}W_iS_i + \beta_{WT}W_iT_i + \beta_{ST}S_iT_i + \beta_{WST}W_iS_iT_i$
+
+where temperature is 1 when it’s hot and 0 when it’s cold. 
+If we would like to make the bloom size zero, we let $\beta_T=-\alpha$, $\beta_{WT}=-\beta_W$, $\beta_{ST}=-\beta_S$, $\beta_{WST}=-\beta_{WS}$, then the whole equation is zero when it’s hot.
+</div>
+
+## Question 6
+In parts of North America, ravens depend upon wolves for their food. This is because ravens are carnivorous but cannot usually kill or open carcasses of prey. Wolves however can and do kill and tear open animals, and they tolerate ravens co-feeding at their kills. This species relationship is generally described as a “species interaction.” Can you invent a hypothetical set of data on raven population size in which this relationship would manifest as a statistical interaction? Do you think the biological interaction could be linear? Why or why not?
+
+<div class="answer">
+__Ans__<br>
+The biological interaction is probably not linear because both the amount of prey and predator depend upon each other. This interaction is not a statical interaction effect at all, because just stating that ravens depend on wolves implies that we can partially predict raven density with wolf density. A statistical interaction requires instead that some other third variable regulate the dependency of ravens on wolves. 
+</div>
+
+```{r}
+N <- 500
+b_prey <- 0.4
+b_wolf <- 0.1
+b_prey_wolf <- 0.6
+
+prey <- rnorm(N, 20, 10)
+wolf <- rnorm(N, 10, 8)
+raven <- rnorm(N, b_prey*prey + b_wolf*wolf + b_prey_wolf*prey*wolf, 1)
+d <- data.frame(raven, prey, wolf)
+plt1 = plot(raven ~ prey, d)
+plt2 = plot(raven ~ wolf, d)
+
+m6 = "
+data{
+  int N;
+  vector[N] raven;
+  vector[N] prey;
+  vector[N] wolf;
+}
+parameters {
+	real a;
+	real b_prey;
+	real b_wolf;
+	real b_prey_wolf;
+	real sigma;
+}
+model {
+  vector[N] mu;
+	mu = a + b_prey*prey + b_wolf * wolf + b_prey_wolf * prey .* wolf;
+	raven ~ normal(mu, sigma);
+
+	a ~ normal(0, 1);
+  b_prey ~ normal(0 , 1);
+  b_wolf ~ normal(0 , 1);
+  b_prey_wolf ~ normal(0 , 1);
+  sigma ~ uniform(0, 5);
+}
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik;
+	
+	pred_mu = a + b_prey*prey + b_wolf * wolf + b_prey_wolf * prey .* wolf;
+	pred_y = normal_rng(pred_mu, sigma);
+	for (i in 1:N){
+		log_lik[i] = normal_lpdf(raven[i] | pred_mu[i], sigma);
+	}
+}
+"
+datm6 = list(N = nrow(d),
+              raven = d$raven,
+              prey = d$prey,
+              wolf = d$wolf
+)
+fitm6 = stan(model_code = m6,
+              data = datm6,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+precis(fitm6)
+```
+
+
+## Question 7
+Return to the data(tulips) example in ch7. Now include the bed variable as a predictor in the interaction model. Don’t interact bed with the other predictors; just include it as a main effect. Note that bed is categorical. So to use it properly, you will need to either construct dummy variables or rather an index variable.
+
+<div class="answer">
+__Ans__<br>
+We can see the result of dummy method and index method are similar. In dummy variable approach, a is the intercept for bed “a”, and the intercepts  "b_bedb" and "b_bedc" are coefficient for bed “b” and bed “c”. In the index variable approach, a[1] is the intercept for bed “a”, a[2] is the intercept for bed “b”, and a[3] is the intercept for bed “c”.
+</div>
+
+```{r}
+data(tulips)
+d <- tulips
+d$blooms_std <- d$blooms / max(d$blooms) 
+d$water_z <- d$water - mean(d$water)
+d$shade_z <- d$shade - mean(d$shade)
+#dummy
+d$bedb <- ifelse(d$bed=="b", 1, 0)
+d$bedc <- ifelse(d$bed=="c", 1, 0)
+#index
+d$bed_index <- coerce_index(d$bed)
+
+set.seed(20)
+m_dummy = "
+data{
+  int N;
+  vector[N] blooms;
+  vector[N] water;
+  vector[N] shade;
+  vector[N] bedb;
+  vector[N] bedc;
+}
+parameters {
+	real a;
+	real b_water;
+	real b_shade;
+	real b_water_shade;
+	real b_bedb;
+	real b_bedc;
+	real sigma;
+}
+model {
+  vector[N] mu;
+	mu = a + b_water*water + b_shade * shade + b_water_shade * water .* shade + b_bedb*bedb + b_bedc*bedc;
+	blooms ~ normal(mu, sigma);
+
+	a ~ normal(20, 10);
+  b_water ~ normal(0 , 10);
+  b_shade ~ normal(0 , 10);
+  b_water_shade ~ normal(0 , 10);
+  b_bedb ~ normal(0 , 10);
+  b_bedc ~ normal(0 , 10);
+  sigma ~ exponential(1);
+}
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik;
+	
+	pred_mu = a + b_water*water + b_shade * shade + b_water_shade * water .* shade + b_bedb*bedb + b_bedc*bedc;
+	pred_y = normal_rng(pred_mu, sigma);
+	for (i in 1:N){
+		log_lik[i] = normal_lpdf(blooms[i] | pred_mu[i], sigma);
+	}
+}
+"
+datm_dummy = list(N = nrow(d),
+              blooms = d$blooms_std,
+              water = d$water_z,
+              shade = d$shade_z,
+              bedb = d$bedb,
+              bedc = d$bedc
+)
+fitm_dummy = stan(model_code = m_dummy,
+              data = datm_dummy,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+precis(fitm_dummy)
+```
+```{r}
+m_index = "
+data{
+  int N;
+  int L;
+  vector[N] blooms;
+  vector[N] water;
+  vector[N] shade;
+  int bed[N];
+}
+parameters {
+	real a[L];
+	real b_water;
+	real b_shade;
+	real b_water_shade;
+	real sigma;
+}
+model {
+  vector[N] mu;
+  for (i in 1:N){
+		mu[i] = a[bed[i]] + b_water * water[i] + b_shade * shade[i] + b_water_shade * water[i] .* shade[i];
+	}
+	blooms ~ normal(mu, sigma);
+	for (i in 1:L){
+		a[i] ~ normal(20, 10);
+	}
+  b_water ~ normal(0 , 10);
+  b_shade ~ normal(0 , 10);
+  b_water_shade ~ normal(0 , 10);
+  sigma ~ exponential(1);
+}
+
+generated quantities {
+	vector[N] pred_mu;
+	vector[N] pred_y;
+	vector[N] log_lik;
+	
+	for (i in 1:N){
+	  pred_mu[i] = a[bed[i]] + b_water * water[i] + b_shade * shade[i] + b_water_shade * water[i] .* shade[i];
+	  pred_y[i] = normal_rng(pred_mu[i], sigma);
+		log_lik[i] = normal_lpdf(blooms[i] | pred_mu[i], sigma);
+		}
+}
+"
+datm_index = list(N = nrow(d),
+                  L = d$bed_index %>% unique() %>% length(),
+                  blooms = d$blooms_std,
+                  water = d$water_z,
+                  shade = d$shade_z,
+                  bed = d$bed_index)
+fitm_index = stan(model_code = m_index,
+              data = datm_index,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+```
+```{r}
+print(fitm_index, pars=c("a", "b_water", "b_shade", "b_water_shade","sigma"), prob=c(.025, .975))
+```
+```{r}
+coeftab_plot(coeftab(fitm_dummy, fitm_index), par=c("a", "a[1]","a[2]", "a[3]", "b_water", "b_shade", "b_water_shade", "b_bedb", "b_bedc"),  xlab="Estimate")
+```
+
+
+## Question 8
+Use WAIC to compare the model from 7. to a model that omits bed. What do you infer from this comparison? Can you reconcile the WAIC results with the posterior distribution of the bed coefficients?
+
+<div class="answer">
+__Ans__<br>
+The model including the bed dummy variables(indexed variables) had a better WAIC than the model omitted the bed variable. We can infer that there’s a lot of variability in blooms and between beds. We can see the plot below, bed “a” had particularly fewer blooms than the other beds. 
+</div>
+
+```{r}
+#omit bed
+m_omitbed = "
+data{
+  int N;
+  vector[N] blooms;
+  vector[N] water;
+  vector[N] shade;
+}
+parameters {
+	real a;
+	real b_water;
+	real b_shade;
+	real b_water_shade;
+	real sigma;
+}
+model {
+  vector[N] mu;
+	mu = a + b_water*water + b_shade * shade + b_water_shade * water .* shade;
+	blooms ~ normal(mu, sigma);
+
+	a ~ normal(20, 10);
+  b_water ~ normal(0 , 10);
+  b_shade ~ normal(0 , 10);
+  b_water_shade ~ normal(0 , 10);
+  sigma ~ exponential(1);
+}
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik;
+	
+	pred_mu = a + b_water*water + b_shade * shade + b_water_shade * water .* shade;
+	pred_y = normal_rng(pred_mu, sigma);
+	for (i in 1:N){
+		log_lik[i] = normal_lpdf(blooms[i] | pred_mu[i], sigma);
+	}
+}
+"
+datm_omitbed = list(N = nrow(d),
+              blooms = d$blooms_std,
+              water = d$water_z,
+              shade = d$shade_z
+)
+fitm_omitbed = stan(model_code = m_omitbed,
+              data = datm_omitbed,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+precis(fitm_omitbed)
+```
+
+```{r}
+rethinking::compare(fitm_dummy, fitm_index, fitm_omitbed)
+```
+```{r}
+post = fitm_dummy %>% as.data.frame()
+post.a <- post$a
+post.b <- post$a + post$b_bedb
+post.c <- post$a + post$b_bedc 
+dens(post.a, col = "red")
+dens(post.b, col = "blue", add = TRUE)
+dens(post.c, col = "green", add = TRUE)
+legend("topleft", legend = c("bed a", "bed b", "bed c"), col=c("red","blue","green"), lty=1,lwd=2)
+```
+
+
+
+## Question 9
+Consider again the data(rugged) data on economic development and terrain ruggedness, examined in this chapter. One of the African countries in that example, Seychelles, is far outside the cloud of other nations, being a rare country with both relatively high GDP and high ruggedness. Seychelles is also unusual, in that it is a group of islands far from the coast of mainland Africa, and its main economic activity is tourism.
+
+Begin by fitting just the interaction model:
+yi ∼ Normal(μi, σ)
+μi = α + βA Ai + βR Ri + βA R Ai Ri
+where y is logGDP per capita in the year 2000 (log of rgdppc_2000); A is cont_africa, the dummy variable for being an Africa nation; and R is the variable rugged. Choose your own priors.
+Compare the inference from this model fit to the data without Seychelles to the same model to the full data. Does it still seem like the effect of ruggedness depends upon continent? How much has the expected relationship changed?
+
+<div class="answer">
+__Ans__<br>
+When we drop the Seychelles out of model, we can see that b_africa(bA) and b_rugged_agrica(bAR) dropped a bit. b_rugged_agrica(bAR) has a rather a bit large difference. From only looking at these estimates, I am less confident that the effect of ruggedness depends upon continent. Or perhaps it still does, but the dependency is smaller than expected. Without the Seychelles, there is more uncertainty, if ruggedness has a positive or any effect on GDP in Africa. The conclusion that the relationship between ruggedness and GDP differs inside and outside of Africa still holds with high probability.
+</div>
+```{r}
+data("rugged")
+d <- rugged
+d = d %>% 
+  filter(complete.cases(rgdppc_2000))
+d = d %>% 
+  mutate(
+    log_gdp = log(rgdppc_2000)) %>% 
+  mutate(
+    log_gdp_std = log_gdp / mean(log_gdp),
+    rugged_std = rugged / max(rugged))
+d2 <- d[d$country != "Seychelles", ]
+
+#with Seychelles
+#only rugged in the model
+mwith_rugged = "
+data {
+	int N;
+	vector[N] loggdp;
+	vector[N] rugged;
+}
+parameters {
+	real a;
+	real b_rugged;
+	real sigma;
+}
+model {
+	vector[N] mu = a + b_rugged * rugged;
+	loggdp ~ normal(mu, sigma);
+
+	a ~ normal(1, 0.1);
+	b_rugged ~ normal(0, 0.3);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik; 
+	
+  pred_mu = a + b_rugged * rugged;
+	pred_y = normal_rng(pred_mu, sigma);
+
+  for (i in 1:N){
+    log_lik[i] = normal_lpdf(loggdp[i] | pred_mu[i], sigma);
+  }
+	
+}
+"
+datmwith_rugged = list(N = nrow(d),
+                       loggdp = d$log_gdp_std,
+                       rugged = d$rugged_std - mean(d$rugged_std))
+
+fitmwith_rugged = stan(model_code = mwith_rugged,
+              data = datmwith_rugged,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+precis(fitmwith_rugged)
+
+#rug & africa in the model
+mwith_both = "
+data {
+	int N;
+	int L; 
+	vector[N] loggdp; 
+	vector[N] rugged; 
+	int africa[N]; 
+}
+parameters {
+	real a;
+	real b_rugged;
+	real b_africa[L];
+	real sigma;
+}
+model {
+	vector[N] mu;
+	for (i in 1:N){
+		mu[i] = a + b_rugged * rugged[i] + b_africa[africa[i]] * africa[i];
+	}
+
+	loggdp ~ normal(mu, sigma);
+
+	for (i in 1:L){
+		b_africa[i] ~ normal(0, 0.3);
+	}
+	b_rugged ~ normal(0, 0.3);
+	sigma ~ exponential(1);
+}
+
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik;
+	
+	for (i in 1:N){
+		pred_mu[i] =  a + b_rugged * rugged[i] + b_africa[africa[i]] * africa[i];
+		log_lik[i] = normal_lpdf(loggdp[i] | pred_mu[i], sigma);
+	}
+	pred_y = normal_rng(pred_mu, sigma);
+}
+"
+datmwith_both = list(N = nrow(d),
+              L = d$cont_africa %>% unique() %>% length(),
+              rugged = d$rugged_std - mean(d$rugged_std),
+              loggdp = d$log_gdp_std,
+              africa = d$cont_africa+1
+)
+fitmwith_both = stan(model_code = mwith_both,
+              data = datmwith_both,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+print(fitmwith_both, pars=c("a", "b_rugged", "b_africa", "sigma"), prob=c(.025, .975))
+
+#rugged & africa and their interaction term in the model
+mwith_interaction = "
+data {
+	int N;
+	int L; 
+	vector[N] loggdp; 
+	vector[N] rugged; 
+	int africa[N]; 
+}
+parameters {
+	real a;
+	real b_rugged;
+	real b_africa[L];
+	real b_rugged_africa[L];
+	real sigma;
+}
+model {
+	vector[N] mu;
+	for (i in 1:N){
+		mu[i] = a + b_rugged * rugged[i] + b_africa[africa[i]] * africa[i] + b_rugged_africa[africa[i]] * africa[i] .* rugged[i];
+	}
+
+	loggdp ~ normal(mu, sigma);
+
+	for (i in 1:L){
+		b_africa[i] ~ normal(0, 0.3);
+		b_rugged_africa[i] ~ normal(0, 0.3);
+	}
+	b_rugged ~ normal(0, 0.3);
+	sigma ~ exponential(1);
+}
+
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik;
+	
+	for (i in 1:N){
+		pred_mu[i] = a + b_rugged * rugged[i] + b_africa[africa[i]] * africa[i] + b_rugged_africa[africa[i]] * africa[i] .* rugged[i];
+		log_lik[i] = normal_lpdf(loggdp[i] | pred_mu[i], sigma);
+	}
+	pred_y = normal_rng(pred_mu, sigma);
+}
+"
+datmwith_interaction = list(N = nrow(d),
+              L = d$cont_africa %>% unique() %>% length(),
+              rugged = d$rugged_std - mean(d$rugged_std),
+              loggdp = d$log_gdp_std,
+              africa = d$cont_africa+1
+)
+fitmwith_interaction = stan(model_code = mwith_interaction,
+              data = datmwith_interaction,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+print(fitmwith_interaction, pars=c("a", "b_rugged", "b_africa", "b_rugged_africa", "sigma"), prob=c(.025, .975))
+```
+
+```{r}
+rethinking::compare(fitmwith_rugged, fitmwith_both, fitmwith_interaction)
+```
+
+
+```{r}
+#without Seychelles 
+#only rugged in the model
+mwithout_rugged = "
+data {
+	int N;
+	vector[N] loggdp;
+	vector[N] rugged;
+}
+parameters {
+	real a;
+	real b_rugged;
+	real sigma;
+}
+model {
+	vector[N] mu = a + b_rugged * rugged;
+	loggdp ~ normal(mu, sigma);
+
+	a ~ normal(1, 0.1);
+	b_rugged ~ normal(0, 0.3);
+	sigma ~ exponential(1);
+}
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik; 
+	
+  pred_mu = a + b_rugged * rugged;
+	pred_y = normal_rng(pred_mu, sigma);
+
+  for (i in 1:N){
+    log_lik[i] = normal_lpdf(loggdp[i] | pred_mu[i], sigma);
+  }
+	
+}
+"
+datmwithout_rugged = list(N = nrow(d2),
+              loggdp = d2$log_gdp_std,
+              rugged = d2$rugged_std - mean(d2$rugged_std))
+
+fitmwithout_rugged = stan(model_code = mwithout_rugged,
+              data = datmwithout_rugged,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+precis(fitmwithout_rugged)
+
+#rugged and africa in model
+mwithout_both = "
+data {
+	int N;
+	int L; 
+	vector[N] loggdp; 
+	vector[N] rugged; 
+	int africa[N]; 
+}
+parameters {
+	real a;
+	real b_rugged;
+	real b_africa[L];
+	real sigma;
+}
+model {
+	vector[N] mu;
+	for (i in 1:N){
+		mu[i] = a + b_rugged * rugged[i] + b_africa[africa[i]] * africa[i];
+	}
+
+	loggdp ~ normal(mu, sigma);
+
+	for (i in 1:L){
+		b_africa[i] ~ normal(0, 0.3);
+	}
+	b_rugged ~ normal(0, 0.3);
+	sigma ~ exponential(1);
+}
+
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik;
+	
+	for (i in 1:N){
+		pred_mu[i] =  a + b_rugged * rugged[i] + b_africa[africa[i]] * africa[i];
+		log_lik[i] = normal_lpdf(loggdp[i] | pred_mu[i], sigma);
+	}
+	pred_y = normal_rng(pred_mu, sigma);
+}
+"
+datmwithout_both = list(N = nrow(d2),
+              L = d2$cont_africa %>% unique() %>% length(),
+              rugged = d2$rugged_std - mean(d2$rugged_std),
+              loggdp = d2$log_gdp_std,
+              africa = d2$cont_africa+1
+)
+fitmwithout_both = stan(model_code = mwithout_both,
+              data = datmwithout_both,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+print(fitmwithout_both, pars=c("a", "b_rugged", "b_africa", "sigma"), prob=c(.025, .975))
+
+#rugged, africa and their interaction in the model
+mwithout_interaction = "
+data {
+	int N;
+	int L; 
+	vector[N] loggdp; 
+	vector[N] rugged; 
+	int africa[N]; 
+}
+parameters {
+	real a;
+	real b_rugged;
+	real b_africa[L];
+	real b_rugged_africa[L];
+	real sigma;
+}
+model {
+	vector[N] mu;
+	for (i in 1:N){
+		mu[i] = a + b_rugged * rugged[i] + b_africa[africa[i]] * africa[i] + b_rugged_africa[africa[i]] * africa[i] .* rugged[i];
+	}
+
+	loggdp ~ normal(mu, sigma);
+
+	for (i in 1:L){
+		b_africa[i] ~ normal(0, 0.3);
+		b_rugged_africa[i] ~ normal(0, 0.3);
+	}
+	b_rugged ~ normal(0, 0.3);
+	sigma ~ exponential(1);
+}
+
+generated quantities {
+	vector[N] pred_mu;
+	real pred_y[N];
+	vector[N] log_lik;
+	
+	for (i in 1:N){
+		pred_mu[i] = a + b_rugged * rugged[i] + b_africa[africa[i]] * africa[i] + b_rugged_africa[africa[i]] * africa[i] .* rugged[i];
+		log_lik[i] = normal_lpdf(loggdp[i] | pred_mu[i], sigma);
+	}
+	pred_y = normal_rng(pred_mu, sigma);
+}
+"
+datmwithout_interaction = list(N = nrow(d2),
+              L = d2$cont_africa %>% unique() %>% length(),
+              rugged = d2$rugged_std - mean(d2$rugged_std),
+              loggdp = d2$log_gdp_std,
+              africa = d2$cont_africa+1
+)
+fitmwithout_interaction = stan(model_code = mwithout_interaction,
+              data = datmwithout_interaction,
+              cores = 2,
+              chains = 2,
+              iter = 2000)
+```
+```{r}
+print(fitmwithout_interaction, pars=c("a", "b_rugged", "b_africa", "b_rugged_africa", "sigma"), prob=c(.025, .975))
+```
+
+
+```{r}
+rethinking::compare(fitmwithout_rugged, fitmwithout_both, fitmwithout_interaction)
+```
+
+## Question 10
+Now plot the predictions of the interaction model, with and without Seychelles. Does it still seem like the effect of ruggedness depends upon continent? How much has the expected relationship changed?
+<div class="answer">
+__Ans__<br>
+The effect of ruggedness still does seem to depend upon continent. When we add the Seychelles in, the model changed the regression line upwards. The plots make it seem that the interaction is rather weak with Seychelles and especially without it.
+</div>
+```{r}
+#with plot
+postmwith_interaction = fitmwith_interaction %>% as.data.frame()
+pred_mumwith_interaction = postmwith_interaction %>% select(contains("pred_mu"))
+pred_ymwith_interaction = postmwith_interaction%>% select(contains("pred_y"))
+
+resultmwith_interaction = data.frame(
+  pred_mu = pred_mumwith_interaction %>% apply(., 2, mean),
+  CI_lower = pred_mumwith_interaction %>% apply(., 2, HPDI) %>% .[1,],
+  CI_upper = pred_mumwith_interaction %>% apply(., 2, HPDI) %>% .[2,],
+  PI_lower = pred_ymwith_interaction %>% apply(., 2, HPDI) %>% .[1,],
+  PI_upper = pred_ymwith_interaction %>% apply(., 2, HPDI) %>% .[2,],
+  gdp = d$log_gdp_std,
+  rugged = d$rugged_std,
+  africa = d$cont_africa
+)
+
+pmwith_interaction = resultmwith_interaction %>% 
+  ggplot(aes(fill = ifelse(africa==1, "africa", "else"))) +
+  geom_point(aes(rugged, gdp),shape=21, stroke=0) + 
+  geom_line(aes(rugged, pred_mu)) +
+  geom_ribbon(aes(x=rugged, ymin=CI_lower, ymax=CI_upper), alpha=.6) +
+  labs(fill="Continent") +
+  ggtitle("With Seychelles")
+
+pmwith_interaction
+pmwith_interaction + facet_wrap(~africa)
+
+#without plot
+postmwithout_interaction = fitmwithout_interaction %>% as.data.frame()
+pred_mumwithout_interaction = postmwithout_interaction %>% select(contains("pred_mu"))
+pred_ymwithout_interaction = postmwithout_interaction%>% select(contains("pred_y"))
+
+resultmwithout_interaction = data.frame(
+  pred_mu = pred_mumwithout_interaction %>% apply(., 2, mean),
+  CI_lower = pred_mumwithout_interaction %>% apply(., 2, HPDI) %>% .[1,],
+  CI_upper = pred_mumwithout_interaction %>% apply(., 2, HPDI) %>% .[2,],
+  PI_lower = pred_ymwithout_interaction %>% apply(., 2, HPDI) %>% .[1,],
+  PI_upper = pred_ymwithout_interaction %>% apply(., 2, HPDI) %>% .[2,],
+  gdp = d2$log_gdp_std,
+  rugged = d2$rugged_std,
+  africa = d2$cont_africa
+)
+
+pmwithout_interaction = resultmwithout_interaction %>% 
+  ggplot(aes(fill = ifelse(africa==1, "africa", "else"))) +
+  geom_point(aes(rugged, gdp),shape=21, stroke=0) + 
+  geom_line(aes(rugged, pred_mu)) +
+  geom_ribbon(aes(x=rugged, ymin=CI_lower, ymax=CI_upper), alpha=.6) +
+  labs(fill="Continent") +
+  ggtitle("Without Seychelles")
+
+pmwithout_interaction
+pmwithout_interaction + facet_wrap(~africa)
+```
+
+

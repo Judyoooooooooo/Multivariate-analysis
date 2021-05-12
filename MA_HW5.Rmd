@@ -1,0 +1,740 @@
+---
+title: "MA_HW5"
+author: "Judy Ou"
+date: "4/29/2021"
+output: 
+  html_document:
+    code_folding: show
+    df_print: paged
+    toc: true
+    theme: united
+    toc_depth: 4
+    number_sections: true
+    toc_float: true
+---
+<style>
+  .answer {color: slateblue}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+library(rstan)
+library(tidyverse)
+library(gridExtra)
+library(skimr) 
+library(DMwR2) 
+```
+
+## Question 1
+What is the difference between an ordered categorical variable and an unordered one? Define and then give an example of each.
+<div class="answer">
+__Ans__<br>
+Ordered categorical variables are those discrete values, like 1,2,3,4,5...these values have fixed order of magnitudes, but the differences of two variables in value are not necessarily equal. For example, if I want to know people's preference of eating vegetables, on the scale from 1 to 10. It might be much harder to move someone's preference for vegetables from 1 to 2 than it is to move it from 7 to 8.
+
+Unordered categorical variables are those not constrained to any order among the values,, but we can't order these variables in any meaningful way, which means different values represent different discrete outcomes. For example, marital status can be single, married, widowed or separated. These are categories and we can't order these from one extreme to another.
+</div>
+
+## Question 2
+What kind of link function does an ordered logistic regression employ? How does it differ from an ordinary logit link?
+<div class="answer">
+__Ans__<br>
+Cumulative logit link function. It's similar to an ordinary logit link, but in which the probability is a cumulative probability instead of a discrete probability of a single event. Therefore, the cumulative logit link states that the linear model is the log-odds of the specified event or any event of lower ordered value.
+</div>
+
+## Question 3
+When count data are zero-inflated, using a model that ignores zero-inflation will tend to induce which kind of inferential error?
+<div class="answer">
+__Ans__<br>
+Underestimate the true rate of events. Zero-inflation means that counts of zero arise through more than one process at least one of which is not accounted for in our model. Subsequently our estimate of the true rate will be pushed closer to 0 than it truly is.
+</div>
+
+## Question 4
+Over-dispersion is common in count data. Give an example of a natural process that might produce over-dispersed counts. Can you also give an example of a process that might produce underdispersed counts?
+<div class="answer">
+__Ans__<br>
+Over-dispersion often comes about as a result of heterogeneity in rates across different sampling units/systems.For example, if we count the number of hot-dogs sold by different vendors for each day over one month, the aggregated counts will likely be over-dispersed. Because some vendors sold more than others, and they don't have the same average rate of sales across days.
+
+Under-dispersion, on the contrary, shows less variation in the rates than would be expected. For example, from the draws of an MCMC sampler, the number of effective samples is typically lower than the number of samples, as the data is highly correlated as the sampler draws sequential samples. For a count model, if a hidden rate limiting variable exists and has not been accounted for, then the variation in counts is lowered, and will show up as under-dispersion.
+</div>
+
+## Question 5
+At a certain university, employees are annually rated from 1 to 4 on their productivity, with 1 being least productive and 4 most productive. In a certain department at this certain university in a certain year, the numbers of employees receiving each rating were (from 1 to 4): 12, 36, 7, 41. Compute the log cumulative odds of each rating.
+<div class="answer">
+__Ans__<br>
+
+</div>
+```{r}
+rate <- c(12, 36, 7, 41)
+q <- rate / sum(rate)
+q
+p <- cumsum(q)
+p
+log_cum_odd <- log(p/(1-p))
+log_cum_odd
+```
+
+
+## Question 6
+In 2014, a paper was published that was entitled “Female hurricanes are deadlier than male
+hurricanes.” As the title suggests, the paper claimed that hurricanes with female names have caused greater loss of life, and the explanation given is that people unconsciously rate female hurricanes as less dangerous and so are less likely to evacuate.
+Statisticians severely criticized the paper after publication. Here, you’ll explore the complete data used in the paper and consider the hypothesis that hurricanes with female names are deadlier. Load the data with: library(rethinking); data(Hurricanes)
+
+Acquaint yourself with the columns by inspecting the help ?Hurricanes.
+In this problem, you’ll focus on predicting deaths using femininity of each hurricane’s name. Fit and interpret the simplest possible model, a Poisson model of deaths using femininity as a predictor. Compare the model to an intercept-only Poisson model of deaths. How strong is the association between femininity of name and deaths? Which storms does the model fit (retrodict) well? Which storms does it fit poorly?
+<div class="answer">
+__Ans__<br>
+From `m6.1` result, it seems that there is a positive association between femininity of the hurricane names and deaths. The model only with intercept has higher WAIC. 
+To compare which storms does the model fit (retrodict) well. We can see the following plot. 89% interval of the expected value is so narrow. The femininity accounts for very little of the variation in deaths, especially at the high end. There’s a lot of over-dispersion, which is very common in Poisson models. As a consequence, this homogenous Poisson model does a poor job for most of the hurricanes in the sample, as most of them lie outside the prediction envelop.
+</div>
+```{r}
+library(rethinking)
+data(Hurricanes)
+d6 <- Hurricanes
+d6$fem_std <- (d6$femininity - mean(d6$femininity))/sd(d6$femininity)
+dList6 <- list(deaths = d6$deaths, fem_std = d6$fem_std)
+
+#simple model
+m6.1 = "
+data {
+	int N;
+  int deaths[N]; //y
+	real fem_std[N]; //x
+}
+parameters {
+	real alpha;
+	real beta;
+}
+transformed parameters {
+	real lambda[N];
+	for (i in 1:N){
+		lambda[i] = exp(alpha + beta * fem_std[i]);
+	}
+}
+model {
+	// model
+	deaths ~ poisson(lambda);
+
+	// prior
+	alpha ~ normal(0, 10);
+	beta ~ normal(0, 10);
+}
+generated quantities {
+	real log_lik[N];
+	real pred_lambda[N];
+	for (i in 1:N){
+		log_lik[i] = poisson_lpmf(deaths[i] | lambda[i]);
+	}
+	for (i in 1:N){
+        pred_lambda[i] = exp(alpha + beta * fem_std[i]);
+    }
+}
+"
+dat6.1 = list(N = nrow(d6),
+                 deaths = dList6$deaths,
+                 fem_std = dList6$fem_std)
+
+fit6.1 = stan(model_code = m6.1, data = dat6.1, cores = 2, chains = 2)
+precis(fit6.1)
+
+post6.1 = as.data.frame(fit6.1, pars = "pred_lambda")
+result6.1 = d6 %>% mutate(data.frame(
+    pred_deaths = post6.1 %>% apply(., 2, mean),
+    PI_lower = post6.1 %>% apply(., 2, HPDI) %>% .[1,],
+    PI_upper = post6.1 %>% apply(., 2, HPDI) %>% .[2,]))
+
+p6.1 = result6.1 %>% 
+  ggplot() +
+  geom_ribbon(aes(x=d6$fem_std, ymin=PI_lower, ymax=PI_upper), fill="gray")+
+  geom_point(data = d6, aes(fem_std , deaths), pch=16, col=rethinking::rangi2) +
+  geom_line(aes(x=d6$fem_std, y=pred_deaths), col="black") +
+  ylab("deaths") + xlab("femininity(std)")
+p6.1
+```
+
+
+```{r}
+#intercept only
+library(rethinking)
+data(Hurricanes)
+d6.2 <- Hurricanes
+
+m6.2 = "
+data {
+	int N;
+	int deaths[N]; //y
+}
+parameters {
+	real alpha;
+}
+transformed parameters {
+	real lambda[N];
+	for (i in 1:N){
+	  lambda[i] = exp(alpha);
+	}
+}
+
+model {
+	// model
+	deaths ~ poisson(lambda);
+
+	// prior
+	alpha ~ normal(0, 10);
+}
+generated quantities {
+	real log_lik[N];
+	real pred_lambda[N];
+	for (i in 1:N){
+		log_lik[i] = poisson_lpmf(deaths[i] | lambda[i]);
+	}
+  for (i in 1:N){
+    pred_lambda[i] = exp(alpha);
+  }
+}
+"
+dat6.2 = list(N = nrow(d6.2),
+                 deaths = dList6$deaths)
+
+fit6.2 = stan(model_code = m6.2, data = dat6.2, cores = 2, chains = 2)
+precis(fit6.2)
+```
+```{r}
+rethinking::compare(fit6.1, fit6.2)
+```
+
+
+## Question 7
+Counts are nearly always over-dispersed relative to Poisson. So fit a gamma-Poisson (aka negative-binomial) model to predict deaths using femininity. Show that the over-dispersed model no longer shows as precise a positive association between femininity and deaths, with an 89% interval that overlaps zero. Can you explain why the association diminished in strength?
+<div class="answer">
+__Ans__<br>
+From the marginal posterior distributions of the parameters, we can see `beta` overlaps zero and this also can be shown in the following plot.
+Gamma-Poisson model allows each hurricane to have its own expected death rate, sampled from a common distribution that is a function of the femininity of hurricane names. Once we let any given values of alpha and beta to produce many different death rates, because they fit into a gamma distribution that produces variation, then many more distinct values of alpha and beta can be consistent with the data. This results in wider posterior distributions and the association diminished in strength.
+</div>
+
+```{r}
+data(Hurricanes)
+d <- Hurricanes
+d<-d %>% dplyr::mutate(fem_std=standardize(femininity))
+dList7<-list(deaths=d$deaths,femininity=d$femininity, fem_std=d$fem_std)
+
+m7 = "
+data {
+	int N;
+	int deaths[N]; //y
+	real fem_std[N]; //x
+}
+parameters {
+	real alpha;
+	real beta;
+	real scale;
+}
+transformed parameters {
+	real lambda[N];
+	for (i in 1:N){
+	  lambda[i] = exp(alpha + beta * fem_std[i]);
+	}
+}
+
+model {
+	// model
+	deaths ~ neg_binomial_2(lambda, scale);
+
+	// prior
+	alpha ~ normal(1, 10);
+	beta ~ normal(0, 10);
+	scale ~ exponential(1);
+}
+generated quantities {
+	real log_lik[N];
+	real pred_lambda[N];
+	for (i in 1:N){
+		log_lik[i] = neg_binomial_2_lpmf(deaths[i] | lambda[i], scale);
+	}
+	for (i in 1:N){
+	  pred_lambda[i] = exp(alpha + beta * fem_std[i]);
+	}
+}
+"
+dat7 = list(N = nrow(d),
+            deaths = dList7$deaths,
+            fem_std = dList7$fem_std
+            )
+
+fit7 = stan(model_code = m7, data = dat7, cores = 2, chains = 1, warmup = 1500, iter = 2000)
+precis(fit7)
+```
+```{r}
+coeftab_plot(coeftab(fit6.1, fit7), par=c("alpha", "beta", "scale"),  xlab="Estimate")
+```
+```{r}
+post7 = as.data.frame(fit7, pars = "pred_lambda")
+result7 = d %>% mutate(data.frame(
+    pred_deaths = post7 %>% apply(., 2, mean),
+    PI_lower = post7 %>% apply(., 2, HPDI) %>% .[1,],
+    PI_upper = post7 %>% apply(., 2, HPDI) %>% .[2,]))
+
+p7 = result7 %>% 
+  ggplot() +
+  geom_ribbon(aes(fem_std, ymin=PI_lower, ymax=PI_upper), fill="gray")+
+  geom_point(data = d, aes(fem_std , deaths), pch=16, col=rethinking::rangi2)+
+  geom_line(aes(fem_std , pred_deaths), col="black") +
+  ylab("deaths") + xlab("femininity(std)")
+p7
+```
+
+
+## Question 8
+In order to infer a strong association between deaths and femininity, it’s necessary to include an interaction effect. In the data, there are two measures of a hurricane’s potential to cause death: damage_norm and min_pressure. Consult ?Hurricanes for their meanings. It makes some sense to imagine that femininity of a name matters more when the hurricane is itself deadly. This implies an interaction between femininity and either or both of damage_norm and min_pressure.
+Fit a series of models evaluating these interactions. Interpret and compare the models. In interpreting the estimates, it may help to generate counterfactual predictions contrasting hurricanes with masculine and feminine names. Are the effect sizes plausible?
+
+<div class="answer">
+__Ans__<br>
+I did the basic model first, and then add the interaction term. From result `m8p_interact`, we can see that the lower the pressure in a storm, the more severe the storm, and the more people die which is reflected by the negative value in `b_press`. `b_fem` is estimated to be positive, and the interval doesn’t overlap zero. Besides, the interaction effect `b_fem_press` is positive.
+
+From the following plot, on average, masculine storms expected to be less deadly than feminine ones. As pressure drops, these differences become smaller and smaller.
+</div>
+```{r}
+library(rethinking)
+data(Hurricanes)
+d <- Hurricanes 
+d$femininity_std <- standardize(d$femininity)
+d$min_pressure_std <- standardize(d$min_pressure)
+d$damage_norm_std <- standardize(d$damage_norm)
+
+dList8 <- list(deaths=d$deaths, femininity=d$femininity, femininity_std=d$femininity_std, min_pressure_std=d$min_pressure_std, damage_norm_std=d$damage_norm_std)
+```
+
+```{r}
+# add min_pressure. No interaction term
+m8p = "
+data {
+	int N;
+	int deaths[N]; //y
+	real fem[N]; //x
+	real press[N];
+}
+parameters {
+	real alpha;
+	real b_fem;
+	real b_press;
+	real scale;
+}
+transformed parameters {
+	real lambda[N];
+	for (i in 1:N){
+	  lambda[i] = exp(alpha + b_fem * fem[i] + b_press * press[i]);
+	}
+}
+
+model {
+	// model
+	deaths ~ neg_binomial_2(lambda, scale);
+
+	// prior
+	alpha ~ normal(0, 10);
+	b_fem ~ normal(0, 1);
+	b_press ~ normal(0, 1);
+	scale ~ exponential(1);
+}
+generated quantities {
+	real log_lik[N];
+	real pred_lambda[N];
+	for (i in 1:N){
+		log_lik[i] = neg_binomial_2_lpmf(deaths[i] | lambda[i], scale);
+	}
+	for (i in 1:N){
+	  pred_lambda[i] = exp(alpha + b_fem * fem[i] + b_press * press[i]);
+	}
+}
+"
+dat8p = list(N = nrow(d),
+            deaths = dList8$deaths,
+            fem = dList8$femininity_std,
+            press = dList8$min_pressure_std
+            )
+
+fit8p = stan(model_code = m8p, data = dat8p, cores = 2, chains = 1, warmup = 1500, iter = 3000)
+precis(fit8p)
+```
+
+```{r}
+# add min_pressure. With interaction term
+m8p_interact = "
+data {
+	int N;
+	int deaths[N]; //y
+	real fem[N]; //x
+	real press[N];
+}
+parameters {
+	real alpha;
+	real b_fem;
+	real b_press;
+	real b_fem_press;
+	real scale;
+}
+transformed parameters {
+	real lambda[N];
+	for (i in 1:N){
+	  lambda[i] = exp(alpha + b_fem * fem[i] + b_press * press[i] + b_fem_press * fem[i] .* press[i]);
+	}
+}
+
+model {
+	// model
+	deaths ~ neg_binomial_2(lambda, scale);
+
+	// prior
+	alpha ~ normal(0, 10);
+	b_fem ~ normal(0, 1);
+	b_press ~ normal(0, 1);
+	b_fem_press ~ normal(0, 1);
+	scale ~ exponential(1);
+}
+generated quantities {
+	real log_lik[N];
+	real pred_lambda[N];
+	for (i in 1:N){
+		log_lik[i] = neg_binomial_2_lpmf(deaths[i] | lambda[i], scale);
+	}
+	for (i in 1:N){
+	  pred_lambda[i] = exp(alpha + b_fem * fem[i] + b_press * press[i] + b_fem_press * fem[i] .* press[i]);
+	}
+}
+"
+dat8p_interact = list(N = nrow(d),
+            deaths = dList8$deaths,
+            fem = dList8$femininity_std,
+            press = dList8$min_pressure_std
+            )
+
+fit8p_interact = stan(model_code = m8p_interact, data = dat8p_interact, cores = 2, chains = 1, warmup = 1500, iter = 3000)
+precis(fit8p_interact)
+```
+```{r}
+rethinking::compare(fit8p, fit8p_interact)
+```
+
+
+
+```{r}
+#female
+post8p_interact = as.data.frame(fit8p_interact, pars = "pred_lambda")
+result8p_interact = d %>% mutate(data.frame(
+    pred_deaths = post8p_interact %>% apply(., 2, mean),
+    PI_lower = post8p_interact %>% apply(., 2, HPDI) %>% .[1,],
+    PI_upper = post8p_interact %>% apply(., 2, HPDI) %>% .[2,]))
+
+p8p_interact = result8p_interact %>% 
+  ggplot(aes(fill = ifelse(female==1, "female", "male"))) +
+  geom_line(aes(x=min_pressure_std , sqrt(pred_deaths))) +
+  geom_ribbon(aes(min_pressure_std, ymin=sqrt(PI_lower), ymax=sqrt(PI_upper)), alpha=.6)+
+  geom_point(data = d, aes(min_pressure_std , sqrt(deaths)), col=ifelse(d$female == 1, "red", "blue"), shape=21, stroke=0) + 
+  ylab("deaths(sqrt)") + xlab("min_pressure(std)") +
+  labs(fill="female/male")
+  
+p8p_interact
+
+```
+
+<div class="answer">
+__Ans__<br>
+From result `m8d_interact`, the interaction parameter `b_fem_damage` is strong and positive.
+From the following plot, we can see how our model makes less of a distinction between masculine and feminine hurricanes. The distances grow fast as we approach the rightward side of the plot. The reason why `b_fem_damage` is strong:  Probably because of those several highly influential feminine storms at the upper-righthand corner of our plot above which implies that feminine storms are especially deadly when they are damaging to begin with. 
+</div>
+
+```{r}
+# add damage_norm. No interaction term
+m8d = "
+data {
+	int N;
+	int deaths[N]; //y
+	real fem[N]; //x
+	real damage[N];
+}
+parameters {
+	real alpha;
+	real b_fem;
+	real b_damage;
+	real scale;
+}
+transformed parameters {
+	real lambda[N];
+	for (i in 1:N){
+	  lambda[i] = exp(alpha + b_fem * fem[i] + b_damage * damage[i]);
+	}
+}
+
+model {
+	// model
+	deaths ~ neg_binomial_2(lambda, scale);
+
+	// prior
+	alpha ~ normal(0, 10);
+	b_fem ~ normal(0, 1);
+	b_damage ~ normal(0, 1);
+	scale ~ exponential(1);
+}
+generated quantities {
+	real log_lik[N];
+	real pred_lambda[N];
+	for (i in 1:N){
+		log_lik[i] = neg_binomial_2_lpmf(deaths[i] | lambda[i], scale);
+	}
+	for (i in 1:N){
+	  pred_lambda[i] = exp(alpha + b_fem * fem[i] + b_damage * damage[i]);
+	}
+}
+"
+dat8d = list(N = nrow(d),
+            deaths = dList8$deaths,
+            fem = dList8$femininity_std,
+            damage = dList8$damage_norm_std)
+
+fit8d = stan(model_code = m8d, data = dat8d, cores = 2, chains = 1, warmup = 1500, iter = 3000)
+precis(fit8d)
+```
+
+```{r}
+# add damage_norm. With interaction term
+m8d_interact = "
+data {
+	int N;
+	int deaths[N]; //y
+	real fem[N]; //x
+	real damage[N];
+}
+parameters {
+	real alpha;
+	real b_fem;
+	real b_damage;
+	real b_fem_damage;
+	real scale;
+}
+transformed parameters {
+	real lambda[N];
+	for (i in 1:N){
+	  lambda[i] = exp(alpha + b_fem * fem[i] + b_damage * damage[i] + b_fem_damage * fem[i] .* damage[i]);
+	}
+}
+
+model {
+	// model
+	deaths ~ neg_binomial_2(lambda, scale);
+
+	// prior
+	alpha ~ normal(0, 10);
+	b_fem ~ normal(0, 1);
+	b_damage ~ normal(0, 1);
+	b_fem_damage ~ normal(0, 1);
+	scale ~ exponential(1);
+}
+generated quantities {
+	real log_lik[N];
+	real pred_lambda[N];
+	for (i in 1:N){
+		log_lik[i] = neg_binomial_2_lpmf(deaths[i] | lambda[i], scale);
+	}
+	for (i in 1:N){
+	  pred_lambda[i] = exp(alpha + b_fem * fem[i] + b_damage * damage[i] + b_fem_damage * fem[i] .* damage[i]);
+	}
+}
+"
+dat8d_interact = list(N = nrow(d),
+            deaths = dList8$deaths,
+            fem = dList8$femininity_std,
+            damage = dList8$damage_norm_std)
+
+fit8d_interact = stan(model_code = m8d_interact, data = dat8d_interact, cores = 2, chains = 1, warmup = 1500, iter = 3000)
+precis(fit8d_interact)
+```
+```{r}
+rethinking::compare(fit8d, fit8d_interact)
+```
+
+```{r}
+post8d_interact = as.data.frame(fit8d_interact, pars = "pred_lambda")
+result8d_interact = d %>% mutate(data.frame(
+    pred_deaths = post8d_interact %>% apply(., 2, mean),
+    PI_lower = post8d_interact %>% apply(., 2, HPDI) %>% .[1,],
+    PI_upper = post8d_interact %>% apply(., 2, HPDI) %>% .[2,]))
+
+p8d_interact = result8d_interact %>% 
+  ggplot(aes(fill = ifelse(female==1, "female", "male"))) +
+  geom_line(aes(damage_norm_std , sqrt(pred_deaths)))+
+  geom_ribbon(aes(damage_norm_std, ymin=sqrt(PI_lower), ymax=sqrt(PI_upper)), alpha=.6)+
+  geom_point(data = d, aes(damage_norm_std, sqrt(deaths)), shape=21, stroke=0) +
+  scale_y_continuous(limits = c(0, 20))+
+  scale_x_continuous(limits = c(0, 1,5))+
+  ylab("death(sqrt)") + xlab("damage(std)") +
+  labs(fill="female/male")
+  
+p8d_interact
+
+```
+
+
+
+## Question 9
+In the original hurricanes paper, storm damage (damage_norm) was used directly. This assumption implies that mortality increases exponentially with a linear increase in storm strength, because a Poisson regression uses a log link. So it’s worth exploring an alternative hypothesis: that the logarithm of storm strength is what matters. Explore this by using the logarithm of damage_norm as a predictor. Using the best model structure from the previous problem, compare a model that uses log(damage_norm) to a model that uses damage_norm directly. Compare their DIC/ WAIC values as well as their implied predictions. What do you conclude?
+
+<div class="answer">
+__Ans__<br>
+From WAIC, we can see model `m8d_interact` outperforms the non-logarithmic model `m9_interact`. From the following plot, we can see the model fits the data much better.
+</div>
+```{r}
+library(rethinking)
+data(Hurricanes)
+d <- Hurricanes 
+
+d$femininity_std <- standardize(d$femininity)
+d$log_damage_norm <- standardize(log(d$damage_norm))
+
+dList9 <- list(deaths=d$deaths, femininity_std=d$femininity_std,  log_damage_norm=d$log_damage_norm)
+```
+
+
+```{r}
+m9_interact = "
+data {
+	int N;
+	int deaths[N]; //y
+	real fem[N]; //x
+	real log_damage[N];
+}
+parameters {
+	real alpha;
+	real b_fem;
+	real b_log_damage;
+	real b_fem_log_damage;
+	real scale;
+}
+transformed parameters {
+	real lambda[N];
+	for (i in 1:N){
+	  lambda[i] = exp(alpha + b_fem * fem[i] + b_log_damage * log_damage[i] + b_fem_log_damage * fem[i] .* log_damage[i]);
+	}
+}
+
+model {
+	// model
+	deaths ~ neg_binomial_2(lambda, scale);
+
+	// prior
+	alpha ~ normal(0, 10);
+	b_fem ~ normal(0, 1);
+	b_log_damage ~ normal(0, 1);
+	b_fem_log_damage ~ normal(0, 1);
+	scale ~ exponential(1);
+}
+generated quantities {
+	real log_lik[N];
+	real pred_lambda[N];
+	for (i in 1:N){
+		log_lik[i] = neg_binomial_2_lpmf(deaths[i] | lambda[i], scale);
+	}
+	for (i in 1:N){
+	  pred_lambda[i] = exp(alpha + b_fem * fem[i] + b_log_damage * log_damage[i] + b_fem_log_damage * fem[i] .* log_damage[i]);
+	}
+}
+"
+dat9_interact = list(N = nrow(d),
+            deaths = dList9$deaths,
+            fem = dList9$femininity_std,
+            log_damage = dList9$log_damage_norm)
+
+fit9_interact = stan(model_code = m9_interact, data = dat9_interact, cores = 2, chains = 1, warmup = 1500, iter = 3000)
+precis(fit9_interact)
+```
+```{r}
+rethinking::compare(fit8d_interact, fit9_interact)
+```
+```{r}
+coeftab_plot(coeftab(fit8d_interact, fit9_interact), par=c("alpha", "b_fem","b_log_damage",  "b_fem_damage","b_fem_log_damage", "scale"),  xlab="Estimate")
+```
+
+
+```{r}
+post9_interact  = as.data.frame(fit9_interact , pars = "pred_lambda")
+result9_interact  = d %>% mutate(data.frame(
+    pred_deaths = post9_interact  %>% apply(., 2, mean),
+    PI_lower = post9_interact  %>% apply(., 2, HPDI) %>% .[1,],
+    PI_upper = post9_interact  %>% apply(., 2, HPDI) %>% .[2,]))
+
+p9_interact  = result9_interact  %>% 
+  ggplot(aes(fill = ifelse(female==1, "female", "male"))) +
+  geom_line(aes(log_damage_norm, sqrt(pred_deaths))) +
+  geom_ribbon(aes(log_damage_norm, ymin=sqrt(PI_lower), ymax=sqrt(PI_upper)), alpha=.6)+
+  geom_point(data = d, aes(log_damage_norm, sqrt(deaths)), shape=21, stroke=0) +
+  ylab("death(sqrt)") + xlab("log_damage(std)") +
+  labs(fill="female/male")
+p9_interact 
+```
+
+## Question 10
+The data in data(Fish) are records of visits to a national park. See ?Fish for details. The question of interest is how many fish an average visitor takes per hour, when fishing. The problem is that not everyone tried to fish, so the fish_caught numbers are zero-inflated. As with the monks example in the chapter, there is a process that determines who is fishing (working) and another process that determines fish per hour (manuscripts per day), conditional on fishing (working). We want to model both. Otherwise we’ll end up with an underestimate of rate of fish extraction from the park.
+You will model these data using zero-inflated Poisson GLMs. Predict fish_caught as a function of any of the other variables you think are relevant. One thing you must do, however, is use a proper Poisson offset/exposure in the Poisson portion of the zero-inflated model. Then use the hours variable to construct the offset. This will adjust the model for the differing amount of time individuals spent in the park.
+<div class="answer">
+__Ans__<br>
+The following is the result. We can see one person is expected to extract on average 0.65 fish per hour and one child is expected to extract on average 0.63 fish per hour. This estimate allows for the zero-inflation, so it accounts for the probability that the person is not fishing at all, depressing the expected value.
+</div>
+```{r}
+data(Fish)
+fish <- c(as.list(Fish), N=nrow(Fish))
+
+model_code <- "
+  data {
+    int N;
+    int fish_caught[N];
+    int livebait[N];
+    int camper[N];
+    int persons[N];
+    int child[N];
+    real hours[N];
+  }
+  parameters {
+    real a;
+    real b_lb;
+    real b_p;
+    real b_c;
+    real c;
+    real d_p;
+    real d_c;
+    real d_ca;
+  } 
+  transformed parameters {
+    real<lower=0> lambda[N];
+    real<lower=0, upper=1> p[N];
+    
+    for (i in 1:N) {
+      lambda[i] = exp(a + b_lb * livebait[i] + b_p * persons[i] + b_c * child[i] + log(hours[i]));
+      p[i] = inv_logit(c + d_p * persons[i] + d_c * child[i] + d_ca * camper[i]);
+    }
+  }
+  model {
+    a ~ normal(0, 1);
+    b_lb ~ normal(0, 1);
+    b_p ~ normal(0, 1);
+    b_c ~ normal(0, 1);
+    c ~ normal(0, 1);
+    d_p ~ normal(0, 1);
+    d_c ~ normal(0, 1);
+    d_ca ~ normal(0, 1);  
+    
+    for (n in 1:N) {
+      if (fish_caught[n] == 0)
+        target += log_sum_exp(bernoulli_lpmf(1 | p[n]), bernoulli_lpmf(0 | p[n]) + poisson_lpmf(fish_caught[n] | lambda[n]));
+      else
+        target += bernoulli_lpmf(0 | p[n]) + poisson_lpmf(fish_caught[n] | lambda[n]);
+    }
+  }
+"
+
+model_fit <- stan(model_code=model_code, data=fish)
+precis(model_fit)
+```
+```{r}
+post10 = as.data.frame(model_fit)
+mean(logistic(post10$b_p))
+mean(logistic(post10$b_c))
+```
+

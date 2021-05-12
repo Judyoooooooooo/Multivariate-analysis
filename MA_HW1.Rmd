@@ -1,0 +1,470 @@
+---
+title: 'Multivariate analysis_Homework 1'
+author: "YI-CHUN OU"
+date: "3/9/2021"
+output:
+  html_document:
+    code_folding: show
+    df_print: paged
+    toc: true
+    theme: united
+    toc_depth: 4
+    number_sections: true
+    toc_float: true
+---
+<style>
+  .answer {color: blue}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rethinking)
+library(rstan)
+library(gridExtra)
+library(ggplot2)
+library(knitr)
+```
+
+
+## Question 1
+Recall the globe tossing model from the chapter. Compute and plot the grid approximate posterior distribution for each of the following sets of observations. In each case, assume a uniform prior for p.
+```{r}
+include_graphics("/Users/ouyijun/Desktop/Question1.jpeg")
+```
+
+(1) W, W, W
+```{r}
+p_grid <- seq(from=0, to=1, length.out=30)
+prior <- rep(1, 30)
+likelihood <- dbinom(3, size = 3, prob=p_grid)
+post <- likelihood*prior
+posterior <- post/sum(post)
+plot(p_grid, posterior, type="b", xlab="Probability of water", ylab="Posterior probability")
+mtext("(1) W, W, W")
+```
+
+(2) W, W, W, L
+```{r}
+p_grid <- seq(from=0, to=1, length.out=30)
+prior <- rep(1, 30)
+likelihood <- dbinom(3, size=4, prob=p_grid)
+post <- likelihood*prior
+posterior <- post/sum(post)
+plot(p_grid, posterior, type="b", xlab="Probability of water", ylab="Posterior probability")
+mtext("(2) W, W, W, L")
+```
+
+(3) L, W, W, L, W, W, W
+```{r}
+p_grid <- seq(from=0, to=1, length.out=30)
+prior <- rep(1, 30)
+likelihood <- dbinom(5, size=7, prob=p_grid)
+post <- likelihood*prior
+posterior <- post/sum(post)
+plot(p_grid, posterior, type="b", xlab="Probability of water", ylab="Posterior probability")
+mtext("(3) L, W, W, L, W, W, W")
+```
+
+## Question 2
+Now assume a prior for p that is equal to zero when p < 0.5 and is a positive constant when p ≥ 0.5. Again compute and plot the grid approximate posterior distribution for each of the sets of observations in the problem just above.
+```{r}
+include_graphics("/Users/ouyijun/Desktop/Question2.jpeg")
+```
+
+(1)W, W, W
+```{r}
+p_grid <- seq(from=0, to=1, length.out=30)
+prior <- ifelse(p_grid<0.5, 0, 1)
+likelihood <- dbinom(3, size=3, prob=p_grid)
+post <- likelihood*prior
+posterior <- post/sum(post)
+plot(p_grid, posterior, type="b", xlab="Probability of water", ylab="Posterior probability")
+mtext("(1) W, W, W")
+```
+
+
+(2)W, W, W, L
+```{r}
+p_grid <- seq(from=0, to=1, length.out=30)
+prior <- ifelse(p_grid<0.5, 0, 1)
+likelihood <- dbinom(3, size=4, prob=p_grid)
+post <- likelihood*prior
+posterior <- post/sum(post)
+plot(p_grid, posterior, type="b", xlab="Probability of water", ylab="Posterior probability")
+mtext("(2) W, W, W, L")
+```
+
+
+(3)L, W, W, L, W, W, W
+```{r}
+p_grid <- seq(from=0, to=1, length.out=30)
+prior <- ifelse(p_grid<0.5, 0, 1)
+likelihood <- dbinom(5, size=7, prob=p_grid)
+post <- likelihood*prior
+posterior <- post/sum(post)
+plot(p_grid, posterior, type="b", xlab="Probability of water", ylab="Posterior probability")
+mtext("(3) L, W, W, L, W, W, W")
+```
+
+
+## Question 3
+A common boast of Bayesian statisticians is that Bayesian Inference makes it easy to use all of the data, even if the data are of different types. So suppose now that veterinarian comes along who has a new genetic test that she claims can identify the species of our mother panda. But the test, like all tests, is imperfect. This is the information you have about the test:
+
+● The probability it correctly identifies a species A panda is 0.8.
+● The probability it correctly identifies a species B panda is 0.65.
+
+The vet administers the test to your panda and tells you that the test is positive for species A. First ignore your previous information from the births and compute the posterior probability that your panda is species A. Then redo your calculation, now using the birth data as well.
+```{r}
+library(knitr)
+include_graphics("/Users/ouyijun/Desktop/Question3.jpeg")
+```
+
+
+## Question 4
+4. Use rbinom to simulate 10,000 replicates of 200 births. You should end up with 10,000 numbers, each one a count of boy out if 200 births. Compare the distribution of predicted numbers of boys to the actual count in the data (111 boys out fo 200 births). There are many good ways to visualize the simulations, but the dens command (part of the rethinking package) is probably the easiest way in this case. Does it look like the model fits the data well? That is, does the distribution of prediction include the actual observation as a central, likely outcome?
+<div class="answer">
+__Ans__<br>
+The black line is the simulated counts of boys births and the red line is the observed count in the data. We can see the observed number of boys is almost in the center of predicted numbers of boys(red line), so we could say that the model fits the observed data well.
+</div>
+
+```{r}
+birth1 <- c(1,0,0,0,1,1,0,1,0,1,0,0,1,1,0,1,1,0,0,0,1,0,0,0,1,0,0,0,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,0,1,0,0,1,1,0,1,0,0,0,0,0,0,0,1,1,0,1,0,0,1,0,0,0,1,0,0,1,1,1,1,0,1,0,1,1,1,1,1,0,0,1,0,1,1,0, 1,0,1,1,1,0,1,1,1,1)
+birth2 <- c(0,1,0,1,0,1,1,1,0,0,1,1,1,1,1,0,0,1,1,1,0,0,1,1,1,0,1,1,1,0,1,1,1,0,1,0,0,1,1,1,1,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,0,1,1,0,1,1,1,0,0,0,0,0,0,1,0,0,0,1,1,0,0,1,0,0,1,1, 0,0,0,1,1,1,0,0,0,0)
+data(homeworkch3)
+birth_grid <- seq(from=0, to=1, length.out=100) 
+prior <- rep(1, 100)
+likelihood <- dbinom(sum(birth1)+sum(birth2), size=200, prob=birth_grid) 
+post <- likelihood*prior
+posterior <- post/sum(post)
+
+samples1 <- sample(birth_grid, 1e4, replace=TRUE, prob=posterior)
+boy <- rbinom(1e4, size=200, prob=samples1)
+dens(boy, adj=0.1, xlab="No. of boys birth")
+abline(v=sum(birth1)+sum(birth2), col="red")
+title("Simulation of 111 boys out of 200 births")
+```
+
+
+## Question 5
+5. (Following with 4. ) Now compare 10,000 counts of boys from 100 simulations first borns only to the number of boys in the first births, birth1. How does the model look in this light?
+<div class="answer">
+__Ans__<br>
+The observed value of 51 boys in 100 first borns is consistent with the model because it is near the center of the probability mass function(red line).
+</div>
+```{r, message = FALSE}
+likelihood <- dbinom(sum(birth1), size=100, prob=birth_grid)
+post <- likelihood*prior
+posterior <- post/sum(post)
+samples2 <- sample(birth_grid, prob=posterior, size=1e4, replace=TRUE)
+first_boy <- rbinom(1e4, size=100, prob=samples2)
+dens(first_boy, adj=0.1, xlab="No. of birth")
+title("Simulation of the first birth")
+abline(v=sum(birth1), col="red")
+```
+
+
+## Question 6
+(Following with 5. ) The model assumes that sex of first and second births are independent. To check this assumption, focus now on second births that followed female first borns. Compare 10,000 simulated counts of boys to only those second births that followed girls. To do this correctly, you need to count to number of first borns who were girls and simulate that many births, 10,000 times. Compare the counts of boys in your simulations to the actual observed count of boys following girls. How does the model look in this light? Any guesses what is going on in these data?
+<div class="answer">
+__Ans__<br>
+In the simulation model, of all the 49 births, we found that there are 39 boys on second births that followed girl first borns, which implied that if the first-born is a girl, the chance of the second-born being a boy is much higher. This simulation model's result is against with the model's(from the question) assumption that the sex of first and second births are independent. We couldn't proof this independent relationships in the simulation model. I guessed that there may exist some biological, genetic or some other factors make the gender of the second child is not independent from the first one.
+</div>
+
+```{r, message = FALSE}
+#second births that followed female first borns
+births <- birth2[birth1==0]
+length(births) #49
+likelihood <- dbinom(111, size=200, prob=birth_grid) 
+post <- likelihood*prior
+posterior <- post/sum(post)
+
+samples3 <- sample(birth_grid, 1e4, replace=TRUE, prob=posterior)
+first_girl <- rbinom(1e4, size=49, prob=samples3)
+dens(first_girl, xlab="No. of girls")
+title("Simulation of the first birth is girl")
+abline(v=sum(births), col="blue")  #blue line represent boy
+simplehist(first_girl, xlab="No. of girls")
+title("Simulation of the first birth is girl")
+abline(v=sum(births), col="blue") #blue line represent boy
+```
+
+
+
+## Question 7
+This problem requires Howell1 data: (a) Model the relationship between height (cm) and the natural logarithm of weight (log-kg). Use the entire Howell1 data frame, all 544 rows, adults and non-adults. Interpret the resulting estimates. 
+<div class="answer">
+__Ans__<br>
+The estimate of a means that when log weight is equal to zero, height is -23.78. 
+The estimate of b means that a one unit increase in log weight corresponds to a 47.08 cm increase in height. This estimate is difficult to understand, because it refers to log-kg, not raw kg.
+The estimate of sigma means that the standard deviation in height predictions is 5.13 cm.
+</div>
+```{r, message = FALSE}
+library(rethinking)
+data("Howell1")
+d <- Howell1
+str(d)
+m1 <- alist(
+    height ~ dnorm(mu, sigma), #likelihood
+    mu <- a+b*log(weight), #mu prior
+    a ~ dnorm(178, 100), #alpha prior
+    b ~ dnorm(0, 100),  #beta prior
+    sigma ~ dunif(0, 50) #sigma prior
+)
+model1 <- map(m1, data=d)
+precis(model1, corr=TRUE)
+```
+
+
+
+7(b) Begin with this plot: plot(height ~ weight, data=Howell1). Then use samples from the quadratic approximate posterior of the model in (a) to superimpose on the plot: (1) the predicted mean height as a function of weight, (2) the 97% interval for the mean, and (3) the 97% interval for predicted height.
+<div class="answer">
+__Ans__<br>
+We may assume this is a linear model with a linear pattern of mean and constant variance, but the plot shows this is a non-linear model. We can see the trend of mean is non-linear. Besides, as the weight increases, the variance around mean also increases. When we change the scale of model, the result will be different.
+</div>
+```{r, message = FALSE}
+data("Howell1")
+d <- Howell1
+plot(height~weight, data=Howell1, col=col.alpha(rangi2,0.4) )
+#take sample
+post <- extract.samples(model1)
+weight.seq <- seq(from=0,to=max(d$weight),length=700)
+mu.mean <- sapply(weight.seq, function(z) mean(post$a+post$b*z) )
+mu.PI <- sapply(weight.seq, function(z) PI(post$a+post$b*z) )
+height.PI <- sapply(weight.seq, function(z) PI(rnorm(10000,post$a+post$b*z,post$sigma) ) ) 
+#plot
+lines(exp(weight.seq), mu.mean)
+lines(exp(weight.seq), mu.PI[1,], lty=2)
+lines(exp(weight.seq), mu.PI[2,], lty=2)
+lines(exp(weight.seq), height.PI[1,], lty=2)
+lines(exp(weight.seq), height.PI[2,], lty=2)
+title("Model for weight and height")
+```
+
+
+
+## Question 8
+This problem requires cherry_blossoms data:
+Model the association between blossom date (boy) and March temperature (temp). Note that there are many missing values in both variables. You may consider a linear model, a polynomial, or a spline on temperature. How well does temperature trend predict the blossom trend?
+<div class="answer">
+__Ans__<br>
+There is a negative relationship between the temperature and blossom date, the higher the temperature, the earlier in the year does it start to blossom. The temperature does have some effect on the day of first blossom, but the uncertainty is quite high.
+</div>
+
+#Linear model
+```{r, message = FALSE}
+data(cherry_blossoms)
+d <- cherry_blossoms
+#deal with missing data
+d2 <- d[complete.cases(d[, c("doy", "temp")]), ] %>%
+  arrange(temp)
+plot(doy~temp, d, col=col.alpha(rangi2, 0.5), pch=20, cex=1.4,
+      ylab = "Blossom date", xlab="March temperature")
+title("Relationship b/w March temperature and Blossom date")
+#linear
+set.seed(2020)
+mu.temp <- mean(d2$temp)
+m8 <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- a + b*(temp - mu.temp),
+    a ~ dnorm(100, 10),
+    b ~ dnorm(0, 1),
+    sigma ~ dexp(1)
+  ), data=list(D=d2$doy, temp=d2$temp) 
+)
+precis(m8)
+
+post <- extract.samples(m8)
+mu <- link(m8)
+mu.PI <- apply(mu, 2, PI, 0.97)
+mu.mean <- apply(mu, 2, mean)
+doy.sim <- sim(m8)
+doy.PI <- apply(doy.sim, 2, PI, 0.97)
+plot(d2$temp, d2$doy, col=col.alpha(rangi2, 0.5), pch=20, cex=1.4,
+     ylab  = "Blossom date", xlab = "March temperature")
+lines(mu.mean~d2$temp)
+shade(mu.PI, d2$temp)
+shade(doy.PI, d2$temp)
+title("Linear model for March temperature and Blossom date")
+```
+
+
+#Quadratic and a cubic model
+```{r, message = FALSE}
+d2$temp_s <- (d2$temp - mu.temp)/sd(d2$temp)
+d2$temp_s2 <- d2$temp_s^2
+d2$temp_s3 <- d2$temp_s^3
+
+mquadratic <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- a + b1*temp_s + b2*temp_s2,
+    a ~ dnorm(100, 10),
+    b1 ~ dnorm(0, 1),
+    b2  ~ dnorm(0, 1),
+    sigma ~ dexp(1)
+  ), data=list(D=d2$doy, temp_s=d2$temp_s, temp_s2=d2$temp_s2) 
+)
+
+par(mfrow=c(1,2))
+temp_seq <- seq(from=-2.2, to=3.5, length.out=100)            
+post <- extract.samples(mquadratic)                           
+# compute mu
+mu <- link(mquadratic, data=list(temp_s=temp_seq,
+                                    temp_s2=temp_seq^2))
+mu.mean <- apply(mu, 2, mean)  # MAP line
+mu.PI <- apply(mu, 2, PI, prob=0.97)
+sim.doy <- sim( mquadratic, data = list(temp_s=temp_seq, temp_s2=temp_seq^2))
+doy.PI <- apply(sim.doy, 2, PI, prob=0.97)
+plot(doy ~ temp_s, data=d2, col=col.alpha(rangi2, 0.5), pch=20, cex=1.4, 
+     ylab="Blossom date", xlab="Standardized March Temperature")
+lines(temp_seq, mu.mean)           
+shade(mu.PI, temp_seq)                 
+shade(doy.PI, temp_seq)             
+title("Quadratic model")
+
+mcubic <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- a+b1*temp_s+b2*temp_s2+b3*temp_s3,
+    a ~ dnorm(100, 10),
+    b1 ~ dnorm(0, 1),
+    b2 ~ dnorm(0, 1),
+    b3 ~ dnorm(0, 1),
+    sigma ~ dexp(1)
+  ), data=list(D=d2$doy, temp_s=d2$temp_s, temp_s2=d2$temp_s2,
+               temp_s3=d2$temp_s3) 
+)
+precis(mcubic)
+
+post <- extract.samples(mcubic)                           
+
+mu <- link( mcubic, data = list(temp_s=temp_seq, 
+                                temp_s2=temp_seq^2, temp_s3=temp_seq^3))
+mu.mean <- apply(mu, 2, mean)  # MAP line
+mu.PI <- apply(mu, 2, PI, prob=0.97)
+sim.doy <- sim( mcubic, data = list(temp_s=temp_seq, temp_s2=temp_seq^2,
+                                    temp_s3=temp_seq^3))
+doy.PI <- apply(sim.doy, 2, PI, prob=0.97)
+plot(doy ~ temp_s, data=d2, col=col.alpha(rangi2, 0.5), pch=20, cex=1.4,
+     ylab="Blossom date", xlab="Standardized March Temperature")
+lines(temp_seq, mu.mean)                                      
+shade(mu.PI, temp_seq)                            
+shade(doy.PI, temp_seq)                             
+title("Cubic model")
+```
+
+<div class="answer">
+__Ans__<br>
+The two models look almost the same as the linear model. Nothing more gained from polynomial and cubic model.
+</div>
+
+##Spine
+```{r, message = FALSE}
+library(splines)
+data(cherry_blossoms)
+d <- cherry_blossoms
+num_knots <- 15
+knot_list <- quantile( d2$temp, probs = seq(0, 1, length.out = num_knots ) )
+
+B <- bs(d2$temp,
+        knots=knot_list[-c(1, num_knots)],
+        degree=3, intercept=TRUE)
+
+ms <- quap(
+  alist(
+    D ~ dnorm( mu, sigma ),
+    mu <- a + B %*% w,
+    a ~ dnorm(100, 10 ),
+    w ~ dnorm(0, 10 ),
+    sigma ~ dexp(1)
+  ), data=list(D=d2$doy, B=B) ,
+  start = list( w=rep( 0, ncol(B)))
+)
+precis(ms)
+
+post <- extract.samples(ms)
+par(mfrow=c(1,1))
+mu <- link(ms)
+mu.PI <- apply(mu, 2, PI, 0.97)
+mu.mean <- apply(mu, 2, mean )
+sim.doy <- sim(ms)
+doy.PI <- apply(sim.doy, 2, PI, prob=0.97)
+plot(d2$temp, d2$doy, col=col.alpha(rangi2, 0.5), pch=20, cex=1.4,
+     ylab  = "Blossom date", xlab = "March Temperature")
+shade(mu.PI, d2$temp)
+shade(doy.PI, d2$temp)
+lines(mu.mean ~ d2$temp)
+title("Splines Model")
+```
+
+<div class="answer">
+__Ans__<br>
+The splines model's has more wavy motion and there is one weird up and down trend for temperatures below 6°C. I guess this down flow may result from some cherry bloosom' s characteristics. Overall, among three models, I would choose the simple linear model.
+</div>
+
+## Question 9
+This problem requires WaffleDivorce data:
+In the divorce data, States with high numbers of members of the Church of Jesus Christ of Latter- day Saints (LDS) have much lower divorce rates than the regression models expected. Find a list of LDS population by State and use those numbers as a predictor variable, predicting divorce rate using marriage rate, median age at marriage, and percent LDS population (possibly standardized). You may want to consider transformations of the raw percent LDS variable.
+<div class="answer">
+__Ans__<br>
+From the model, we can see there is a negative association between lds and divorce rate. The slopes of median age at marriage and percentage lds are negative and their intervals didn't include zero. Thus, states with older median age at marriage or higher percentages of Mormons had lower divorce rates.
+</div>
+
+```{r, message = FALSE}
+#data source:https://en.wikipedia.org/wiki/The_Church_of_Jesus_Christ_of_Latter-day_Saints_membership_statistics_(United_States)
+data(WaffleDivorce)
+d <- WaffleDivorce
+#there is lack of data of nevada
+d$LDS <- c(0.0077, 0.0458, 0.0600, 0.0107, 0.0191, 0.0261, 0.0045, 0.0058, 0.0045, 0.0075, 0.0082, 0.0530, 0.2686, 0.0045, 0.0068, 0.0090, 0.0132, 0.0080, 0.0064, 0.0082, 0.0072, 0.0040, 0.0045, 0.0059, 0.0073, 0.0116, 0.0480, 0.0130, 0.0065, 0.0038, 0.0331, 0.0043, 0.0085, 0.0152, 0.0054, 0.0124, 0.0364, 0.0041, 0.0040, 0.0080, 0.0122, 0.0077, 0.0125, 0.6632, 0.0074, 0.0113, 0.0380, 0.0096, 0.0047, 0.1170)
+
+d$Marriage.standard <- (d$Marriage-mean(d$Marriage))/sd(d$Marriage)
+d$MedianAgeMarriage.standard <- (d$MedianAgeMarriage-mean(d$MedianAgeMarriage))/sd(d$MedianAgeMarriage)
+d$LDS.standard <- (d$LDS-mean(d$LDS))/sd(d$LDS)
+
+m9 <- alist(
+  Divorce ~ dnorm(mu, sigma),
+  mu <- a+b.marriage.rate*Marriage.standard+b.median.age.at.marriage*MedianAgeMarriage.standard+b.lds*LDS.standard,
+    a ~ dnorm(0, 100),
+    b.marriage.rate ~ dnorm(0, 10),
+    b.median.age.at.marriage ~ dnorm(0, 10),
+    b.lds ~ dnorm(0, 10),
+    sigma ~ dunif(0, 10)
+)
+
+model <- map(m9, data=d)
+precis(model)
+```
+
+
+## Question 10
+Write down and compare the definitions of AIC and WAIC. Which of these criteria is most general? Which assumptions are required to transform the more general criterion into a less general one?
+<div class="answer">
+__Ans__<br>
+AIC:Akaike information criterion, is an estimator of prediction error and thereby relative quality of statistical models for a given set of data.AIC provides an approximation of predictive accuracy, as measured by out-of-sample deviance:
+$$
+AIC=D_{train}+2p\
+$$
+where p is the number of free parameters to be estimated in the model, D_train is the in-sample training deviance.
+
+AIC aim at this same target, but are derived under more and less general assumptions. AIC is just the oldest and most restrictive. AIC is an approximation that is reliable only when: 
+(1) The priors are flat or overwhelmed by the likelihood.
+(2) The posterior distribution is approximately multivariate Gaussian.
+(3) The sample size N is much greater95 than the number of parameters k.
+
+WAIC:Widely Applicable Information Criterion has a more complicated definition, but it is also calculated by taking averages of log- likelihood over the posterior distribution. And it is also just an estimate of out-of-sample deviance. It does not require a multivariate Gaussian posterior.WAIC is defined as:
+$$ WAIC=-2(lppd-p_{waic})=-2(\sum_{i=1}^{N}logPr(y_{i})-\sum_{i=1}^{N}V(y_{i}))$$
+$$lppd=\sum_{i=1}^{N}logPr(y_{i})$$lppd:log-pointwise-predictive-density is the total across observations of the logarithm of the average likelihood of each observation.
+$$p_{waic}=\sum_{i=1}^{N}V(y_{i}) $$
+Pr(yi) is the average likelihood of observation i in the training sample, V(yi) is the variance in log-likelihood for observation i in the training sample.
+
+WAIC is more general. When move from WAIC to AIC, we have to assume that the posterior distribution is approximately multivariate Gaussian and the priors are flat or overwhelmed by the likelihood. WAIC makes no assumption about the shape of the posterior, so it's more general.
+</div>
+
+
+
+
+
+
+

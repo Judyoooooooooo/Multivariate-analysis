@@ -1,0 +1,350 @@
+---
+title: "MA_Homework4"
+author: "Judy Ou"
+date: "4/9/2021"
+output: 
+  html_document:
+    df_print: paged
+    toc: true
+    theme: united
+    toc_depth: 4
+    number_sections: true
+    toc_float: true
+---
+<style>
+  .answer {color: blue}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+library(rethinking)
+library(rstan)
+library(tidyverse)
+library(gridExtra)
+library(skimr) #for n_unique function
+library(DMwR2) #for unscale function
+```
+
+## Question 1
+Which of the following is a requirement of the simple Metropolis algorithm?
+(1) The parameters must be discrete.
+(2) The likelihood function must be Gaussian.
+(3) The proposal distribution must be symmetric.
+<div class="answer">
+__Ans__<br>
+(1) No. The parameters can be discrete or continuous.
+(2) No. The likelihood function can be any symmetric distribution.
+(3) Yes. The proposal distribution must be symmetric.
+</div>
+
+
+## Question 2
+Gibbs sampling is more efficient than the Metropolis algorithm. How does it achieve this extra efficiency? Are there any limitations to the Gibbs sampling strategy?
+<div class="answer">
+__Ans__<br>
+Gibbs uses adaptive proposals when considering which location in the posterior to sample next. Adaptive proposals depends upon using particular combinations of prior distributions and likelihoods known as conjugate pairs. Conjugate pairs have analytical solutions for the posterior distribution of an individual parameter. And these solutions are what allow Gibbs sampling to make smart jumps around the joint posterior distribution of all parameters.This makes it more efficient because less proposed steps are rejected.
+
+There are some limitations to Gibbs sampling. First, maybe you don’t want to use conjugate priors. Some conjugate priors seem silly, and choosing a prior so that the model fits efficiently isn’t really a strong argument from a scientific perspective. Second, as models become more complex and contain hundreds or thousands or tens of thousands of parameters, Gibbs sampling becomes shockingly inefficient. In those cases, there are other algorithms.
+</div>
+
+## Question 3
+Which sort of parameters can Hamiltonian Monte Carlo not handle? Can you explain why?
+<div class="answer">
+__Ans__<br>
+Discrete parameters. Hamiltonian Monte Carlo depends on gradients which to explore using a physics simulation. Discrete parameters would not allow for the construction of any gradients, which means cannot glide through discrete parameters without slopes.
+</div>
+
+## Question 4
+Modify the Metropolis algorithm code from Chapter 8 to handle the case that the island
+populations have a different distribution than the island labels. This means the island’s number will not be the same as its population.
+
+<div class="answer">
+__Ans__<br>
+We create 10 islands with population sizes of 1-10 in random order, and the following is the result. Ezch time we rerun the model, the number will a bit change. The island index are parameter values and the population sizes are posterior probabilities.
+</div>
+
+```{r, results='hide'}
+population <- sample(1:10)
+num_weeks <- 1e5
+position <- rep(0, num_weeks)
+current <- 10
+for(i in 1:num_weeks){
+  position[i] <- current
+  proposal <- current + sample(c(-1,1), size=1)
+  if(proposal < 1) proposal <- 10
+  if(proposal > 10) proposal <- 1
+  
+  prob_move <- population[proposal] / population[current]
+  current <- ifelse(runif(1) < prob_move, proposal, current)
+}
+
+#plot
+t <- table(position) 
+plot(as.vector(t), population,
+  type = "n", 
+  xlab = "frequency", ylab = "population size"
+) 
+text(x = t, y = population, labels = names(t))
+```
+
+## Question 5
+Modify the Metropolis algorithm code from the Chapter 8 to write your own simple MCMC estimator for globe tossing data and model from Chapter 2.
+
+<div class="answer">
+__Ans__<br>
+
+</div>
+```{r, results='hide'}
+set.seed(42)
+w <- 6
+n <- 9
+
+num_sample <- 1e4
+p_sample <- rep(0, num_sample)
+p_current <- 0.5
+for(i in 1:num_sample){
+  p_sample[i] <- p_current
+  p_proposal <- runif(1, 0, 1)
+  
+  current <- dbinom(w, n, p_current) * dunif(p_current,0,1)
+  proposal <- dbinom(w, n, p_proposal) * dunif(p_proposal,0,1)
+
+  prob_move <- proposal/current
+  p_current <- ifelse(runif(1) < prob_move, p_proposal, p_current)
+}
+  plot(p_sample, type="l", ylab="probability water")
+  
+  dens(p_sample, col = "royalblue4", adj = 1)
+  curve(dbeta(x, w + 1, n - w + 1), from = 0, to = 1, add = T, lty = 2)
+  abline(v = median(p_sample))
+```
+
+
+## Question 6
+As explained in Chapter 10, binomial data can be organized in aggregated and disaggregated forms, without any impact on inference. But the likelihood of the data does change when the data are converted between the two formats. Please explain why?
+
+<div class="answer">
+__Ans__<br>
+In the aggregated form of the data, we obtain the probability of our observation as 3p(1-p) (a binomial distribution with 3 trials and a rate of black face cards of p=2/3. This tells us how many ways there are to get two black-face cards out of three pulls of cards. The order is irrelevant.
+
+With disaggregated data, we do not cope with any order, but simply predict the result of each draw of a card by itself and finally multiply our predictions together to form a joint probability according to p(1-p).
+
+In conclusion, aggregated data is modeled with an extra constant to handle permutations. This does not change our inference, but merely changes the likelihood and log-likelihood.
+</div>
+
+## Question 7
+If a coefficient in a Poisson regression has value 1.7, what does this imply about the change in the outcome?
+
+<div class="answer">
+__Ans__<br>
+Basic Poisson regression is expressed as:
+$$log(\lambda)=\alpha + \beta X$$
+$$\lambda=exp(\alpha + \beta X)$$
+When x increases by 1, $\lambda$ will changed:
+$$\delta \lambda=exp(\alpha + \beta(X+1))-exp(\alpha + \beta X)$$
+$$\delta \lambda=exp(\alpha + \beta X)-exp((\beta) - 1)$$
+And the ratio of means:
+$$\frac{\lambda_(x+1)}{\lambda_x} = \frac{exp(\alpha + \beta(X+1))}{exp(\alpha + \beta X)} = exp(\beta)$$
+When $\beta=1.7$ in a Poisson model results in a proportional change in the expected count of exp(1.7) = 5.47 when the corresponding predictor variable increases by one unit.
+</div>
+
+## Question 8
+The data contained in library(MASS) ; data(eagles) are records of salmon pirating attempts by Bald Eagles in Washington State. See ?eagles for details. While one eagle feeds, sometimes another will swoop in and try to steal the salmon from it. Call the feeding eagle the “victim” and the thief the “pirate.” Use the available data to build a binomial GLM of successful pirating attempts.
+
+Consider the following model, ... where y is the number of successful attempts, n is the total number of attempts, P is a dummy variable indicating whether or not the pirate had large body size, V is a dummy variable indicating whether or not the victim had large body size, and finally A is a dummy variable indicating whether or not the pirate was an adult. Fit the model above to the eagles data.
+
+
+```{r, results='hide'}
+library(MASS)
+data("eagles")
+d <- eagles
+d$P <- as.integer(d$P == "L")
+d$A <- as.integer(d$A == "A")
+d$V <- as.integer(d$V == "L")
+d <- c(as.list(d), list(N=nrow(d)))
+
+m8 <- "
+data {
+    int N;
+    vector[N] P;
+    vector[N] A;
+    vector[N] V;
+    int n[N];
+    int y[N];
+}
+parameters {
+    real alpha;
+    real beta_p;
+    real beta_v;
+    real beta_a;
+}
+model {
+    y ~ binomial(n, inv_logit(alpha + beta_p * P + beta_v * V + beta_a * A));
+      
+    alpha ~ normal(0, 1.5);
+    beta_p ~ normal(0, 0.5);
+    beta_v ~ normal(0, 0.5);
+    beta_a ~ normal(0, 0.5);
+}
+generated quantities {
+    vector[N] p;
+    vector[N] count;
+    vector[N] log_lik;
+    
+    for(i in 1:N){
+        p[i] = inv_logit(alpha + beta_p * P[i] + beta_v * V[i] + beta_a * A[i]);
+        count[i] = binomial_rng(n[i], p[i]);
+        log_lik[i] = binomial_lpmf(y[i] | n[i], p[i]);
+    }
+}
+"
+fit8 <- stan(model_code=m8, data=d)
+precis(fit8)
+post8 = as.data.frame(fit8)
+```
+
+
+## Question 9
+Now interpret the estimates. Then plot the posterior predictions. Compute and display both (1) the predicted probability of success and its 89% interval for each row (i) in the data, as well as (2) the predicted success count and its 89% interval. What different information does each type of posterior prediction provide?
+
+```{r}
+mean(logistic(post8$a))
+```
+<div class="answer">
+__Ans__<br>
+We expect about 57% of all the immature, small pirates to be successful when pirating on small victims.
+</div>
+```{r}
+mean(logistic(post8$a + post8$beta_p))
+```
+<div class="answer">
+__Ans__<br>
+According to the model, large-bodied pirates is almost certain to succeed.
+</div>
+
+```{r}
+df_model <- as.data.frame(fit8)
+df_p <- df_model[, 5:12]
+apply(df_p, 2, HPDI)
+
+p_stat <- apply(df_p, 2, function(x) c(min = min(x), 
+                                       lower = as.numeric(HPDI(x)[1]),
+                                       upper = as.numeric(HPDI(x)[2]),
+                                       middle = as.numeric((HPDI(x)[1] + HPDI(x)[2]) * 0.5),
+                                       max = max(x)))
+p_stat <- t(p_stat)
+p_stat <- data.frame(p_stat)
+p_stat["x"] <- paste0("p[",as.character(c(1:8)), "]")
+
+ggplot(data=p_stat, aes(x=x, ymin = min, lower=lower, middle=middle, upper=upper, ymax=max)) +  
+  geom_boxplot(stat = "identity") + 
+  labs(x="prob", y="value", title="Predicted Probability of Success") 
+```
+```{r}
+df_count <- df_model[, 13:20]
+apply(df_count, 2, HPDI)
+
+count_stat <- apply(df_count, 2, function(x) c(min = min(x), 
+                                               lower = as.numeric(HPDI(x)[1]),
+                                               upper = as.numeric(HPDI(x)[2]),
+                                               middle = as.numeric((HPDI(x)[1] + HPDI(x)[2]) * 0.5),
+                                               max = max(x)))
+count_stat <- t(count_stat)
+count_stat <- data.frame(count_stat)
+count_stat["x"] <- paste0("count[",as.character(c(1:8)), "]")
+
+ggplot(data=count_stat, aes(x=x, ymin = min, lower=lower, middle=middle, upper=upper, ymax=max)) +  
+  geom_boxplot(stat = "identity") + 
+  labs(x="count", y="value", title="Predicted Success Count") 
+```
+<div class="answer">
+__Ans__<br>
+In conclusion, the plot makes the different settings of predictor variables more comparable because the number of piracy attempts are ignored in setting the y-axis. The count plot, however, shows the additional uncertainty stemming from the underlying sample size.
+</div>
+
+## Question 10
+Now try to improve the model. Consider an interaction between the pirate’s size and age (immature or adult). Compare this model to the previous one, using WAIC. Interpret.
+
+<div class="answer">
+__Ans__<br>
+The model including the interaction term has higher WAIC. That is, the model with the interaction term may provide worse prediction. We can probably suggest that the interaction term is redundant and can be therefore omitted with respect to the criterion WAIC.
+</div>
+```{r}
+library(MASS)
+data(eagles)
+d <- eagles
+
+d$PP <- ifelse( d$P=="L" , 1 , 0)
+d$VV <- ifelse( d$V=="L" , 1 , 0)
+d$AA <- ifelse( d$A=="A" , 1 , 0)
+d$PA <- d$AA * d$PP
+
+m10 = "
+data {
+	int N;
+	int y[N];
+	int PP[N];
+	int VV[N];
+	int AA[N];
+	int PA[N];
+	int n[N];
+}
+parameters {
+	real alpha;
+	real beta_p;
+	real beta_v;
+	real beta_a;
+	real beta_pa;
+}
+transformed parameters {
+  real p[N];
+  for (i in 1:N){
+    p[i] = inv_logit(alpha + beta_p * PP[i] + beta_v *VV[i] + beta_a *AA[i] + beta_pa *PA[i]);
+  }
+  
+}
+model {
+  // model
+	y ~ binomial(n, p);
+
+	// prior
+	alpha ~ normal(0, 1.5);
+	beta_p ~ normal(0, 0.5);
+	beta_v ~ normal(0, 0.5);
+	beta_a ~ normal(0, 0.5);
+	beta_pa ~ normal(0, 0.5);
+}
+generated quantities {
+	vector[N] log_lik;
+	int pred_y[N];
+	
+	for (i in 1:N){
+		log_lik[i] = binomial_lpmf(y[i] | n[i], p[i]);
+		pred_y[i] = binomial_rng(n[i], p[i]);
+	}
+}
+"
+dat10 = list(
+  N = nrow(d),
+  y = d$y,
+  PP = d$PP,
+  VV = d$VV,
+  AA = d$AA,
+  PA = d$PA,
+  n = d$n
+)
+fit10 = stan(model_code = m10,
+              data = dat10,
+              chains = 2,
+              iter = 1000,
+              cores = 2)  
+precis(fit10, depth=2)
+post10 = as.data.frame(fit10)
+```
+```{r}
+rethinking::compare(fit8, fit10)
+```
+
+
+
+
